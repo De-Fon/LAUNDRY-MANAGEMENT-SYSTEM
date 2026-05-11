@@ -12,8 +12,6 @@ from app.apps.catalog.schemas import (
     ServiceItemCreate,
     ServiceItemResponse,
     ServiceItemUpdate,
-    WashTypeCreate,
-    WashTypeResponse,
 )
 from app.apps.catalog.service import CatalogService
 from app.core.database import get_db
@@ -48,14 +46,6 @@ def get_items(
     return service.fetch_items(db, category_id)
 
 
-@router.get("/wash-types", response_model=list[WashTypeResponse])
-def get_wash_types(
-    db: Annotated[Session, Depends(get_db)],
-    service: Annotated[CatalogService, Depends(provide_catalog_service)],
-) -> list[WashTypeResponse]:
-    return service.fetch_wash_types(db)
-
-
 @router.get("/items/{item_id}", response_model=ServiceItemResponse)
 def get_item(
     item_id: int,
@@ -83,16 +73,6 @@ def create_item(
     service: Annotated[CatalogService, Depends(provide_catalog_service)],
 ) -> ServiceItemResponse:
     return service.add_item(db, redis_client, data)
-
-
-@router.post("/wash-types", response_model=WashTypeResponse, dependencies=[Depends(require_vendor)])
-def create_wash_type(
-    data: WashTypeCreate,
-    db: Annotated[Session, Depends(get_db)],
-    redis_client: Annotated[Redis, Depends(provide_redis)],
-    service: Annotated[CatalogService, Depends(provide_catalog_service)],
-) -> WashTypeResponse:
-    return service.add_wash_type(db, redis_client, data)
 
 
 @router.put("/items/{item_id}", response_model=ServiceItemResponse, dependencies=[Depends(require_vendor)])
