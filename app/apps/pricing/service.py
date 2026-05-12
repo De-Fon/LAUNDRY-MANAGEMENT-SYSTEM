@@ -14,16 +14,9 @@ class PricingService:
         self.repository = repository
 
     def fetch_wash_types(self, db: Session) -> list[WashTypeResponse]:
-        wash_types = self.repository.get_all_wash_types(db)
-        return [WashTypeResponse.model_validate(wash_type) for wash_type in wash_types]
+        return [WashTypeResponse.model_validate(wash_type) for wash_type in self.repository.get_all_wash_types(db)]
 
     def add_wash_type(self, db: Session, data: WashTypeCreate) -> WashTypeResponse:
-        if data.price_multiplier <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Price multiplier must be greater than 0",
-            )
-
         if self.repository.get_wash_type_by_name(db, data.name) is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Wash type name already exists")
 
@@ -31,17 +24,17 @@ class PricingService:
         return WashTypeResponse.model_validate(wash_type)
 
     def calculate_price(self, base_price: float, multiplier: float) -> PriceCalculationResponse:
-        if base_price <= 0:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Base price must be greater than 0")
-
-        if multiplier <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Price multiplier must be greater than 0",
-            )
-
+        self._validate_positive(base_price, "Base price")
+        self._validate_positive(multiplier, "Price multiplier")
         return PriceCalculationResponse(
             base_price=base_price,
             multiplier=multiplier,
             final_price=calculate_final_price(base_price, multiplier),
         )
+
+    def _validate_positive(self, value: float, field_name: str) -> None:
+        if value <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{field_name} must be greater than 0",
+            )

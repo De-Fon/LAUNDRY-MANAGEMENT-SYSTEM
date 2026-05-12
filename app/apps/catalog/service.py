@@ -1,6 +1,8 @@
 from fastapi import HTTPException, status
 from redis import Redis
+from sqlalchemy.orm import Session
 
+from app.apps.catalog.models import ServiceItem
 from app.apps.catalog.repository import CatalogRepository
 from app.apps.catalog.schemas import (
     CategoryCatalogResponse,
@@ -11,7 +13,6 @@ from app.apps.catalog.schemas import (
     ServiceItemResponse,
     ServiceItemUpdate,
 )
-from sqlalchemy.orm import Session
 
 
 CATALOG_FULL_KEY = "catalog:full"
@@ -23,57 +24,37 @@ class CatalogService:
         self.repository = repository
 
     def fetch_full_catalog(self, db: Session, redis_client: Redis) -> FullCatalogResponse:
-        cached_catalog = redis_client.get(CATALOG_FULL_KEY)
-        if cached_catalog:
+        if cached_catalog := redis_client.get(CATALOG_FULL_KEY):
             return FullCatalogResponse.model_validate_json(cached_catalog)
 
-        categories = self.repository.get_full_catalog(db)
         catalog = FullCatalogResponse(
-            categories=[CategoryCatalogResponse.model_validate(category) for category in categories],
+            categories=[
+                CategoryCatalogResponse.model_validate(category)
+                for category in self.repository.get_full_catalog(db)
+            ],
         )
         redis_client.setex(CATALOG_FULL_KEY, CATALOG_TTL, catalog.model_dump_json())
         return catalog
 
     def fetch_categories(self, db: Session) -> list[CategoryResponse]:
-        categories = self.repository.get_all_categories(db)
-        return [CategoryResponse.model_validate(category) for category in categories]
+        return [CategoryResponse.model_validate(category) for category in self.repository.get_all_categories(db)]
 
     def fetch_items(self, db: Session, category_id: int | None = None) -> list[ServiceItemResponse]:
-        items = self.repository.get_all_items(db, category_id)
-        return [ServiceItemResponse.model_validate(item) for item in items]
+        return [ServiceItemResponse.model_validate(item) for item in self.repository.get_all_items(db, category_id)]
 
     def fetch_item_by_id(self, db: Session, item_id: int) -> ServiceItemResponse:
-        item = self.repository.get_item_by_id(db, item_id)
-        if item is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")
-        return ServiceItemResponse.model_validate(item)
+        return ServiceItemResponse.model_validate(self._get_item_or_404(db, item_id))
 
     def add_category(self, db: Session, redis_client: Redis, data: CategoryCreate) -> CategoryResponse:
-        if not data.name.strip():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Category name cannot be empty")
-
-        if self.repository.get_category_by_name(db, data.name) is not None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Category name already exists")
-
+        self._validate_category_create(db, data)
         category = self.repository.create_category(db, data)
-        self._invalidate_full_catalog(redis_client)
+        self._invalidate_cache(redis_client)
         return CategoryResponse.model_validate(category)
 
     def add_item(self, db: Session, redis_client: Redis, data: ServiceItemCreate) -> ServiceItemResponse:
-        if data.base_price <= 0:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Base price must be greater than 0")
-
-        if self.repository.get_category_by_id(db, data.category_id) is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-
-        if self.repository.get_item_by_name_in_category(db, data.category_id, data.name) is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Item name already exists in this category",
-            )
-
+        self._validate_item_create(db, data)
         item = self.repository.create_item(db, data)
-        self._invalidate_full_catalog(redis_client)
+        self._invalidate_cache(redis_client)
         return ServiceItemResponse.model_validate(item)
 
     def update_item(
@@ -83,40 +64,72 @@ class CatalogService:
         item_id: int,
         data: ServiceItemUpdate,
     ) -> ServiceItemResponse:
-        existing_item = self.repository.get_item_by_id(db, item_id)
-        if existing_item is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")
-
-        target_category_id = data.category_id if data.category_id is not None else existing_item.category_id
-        target_name = data.name if data.name is not None else existing_item.name
-
-        if data.category_id is not None and self.repository.get_category_by_id(db, data.category_id) is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-
-        matching_item = self.repository.get_item_by_name_in_category(db, target_category_id, target_name)
-        if matching_item is not None and matching_item.id != item_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Item name already exists in this category",
-            )
+        item = self._get_item_or_404(db, item_id)
+        self._validate_item_update(db, item.id, item.category_id, item.name, data)
 
         updated_item = self.repository.update_item(db, item_id, data)
         if updated_item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")
 
-        self._invalidate_full_catalog(redis_client)
+        self._invalidate_cache(redis_client)
         return ServiceItemResponse.model_validate(updated_item)
 
     def remove_item(self, db: Session, redis_client: Redis, item_id: int) -> ServiceItemResponse:
-        if self.repository.get_item_by_id(db, item_id) is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")
-
+        self._get_item_or_404(db, item_id)
         deleted_item = self.repository.soft_delete_item(db, item_id)
         if deleted_item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")
 
-        self._invalidate_full_catalog(redis_client)
+        self._invalidate_cache(redis_client)
         return ServiceItemResponse.model_validate(deleted_item)
 
-    def _invalidate_full_catalog(self, redis_client: Redis) -> None:
+    def _get_item_or_404(self, db: Session, item_id: int) -> ServiceItem:
+        item = self.repository.get_item_by_id(db, item_id)
+        if item is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")
+        return item
+
+    def _validate_category_create(self, db: Session, data: CategoryCreate) -> None:
+        if not data.name.strip():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Category name cannot be empty")
+        if self.repository.get_category_by_name(db, data.name) is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Category name already exists")
+
+    def _validate_item_create(self, db: Session, data: ServiceItemCreate) -> None:
+        if data.base_price <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Base price must be greater than 0")
+        if self.repository.get_category_by_id(db, data.category_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+        self._ensure_item_name_available(db, data.category_id, data.name)
+
+    def _validate_item_update(
+        self,
+        db: Session,
+        item_id: int,
+        current_category_id: int,
+        current_name: str,
+        data: ServiceItemUpdate,
+    ) -> None:
+        category_id = data.category_id if data.category_id is not None else current_category_id
+        name = data.name if data.name is not None else current_name
+
+        if data.category_id is not None and self.repository.get_category_by_id(db, data.category_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+        self._ensure_item_name_available(db, category_id, name, excluded_item_id=item_id)
+
+    def _ensure_item_name_available(
+        self,
+        db: Session,
+        category_id: int,
+        name: str,
+        excluded_item_id: int | None = None,
+    ) -> None:
+        item = self.repository.get_item_by_name_in_category(db, category_id, name)
+        if item is not None and item.id != excluded_item_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Item name already exists in this category",
+            )
+
+    def _invalidate_cache(self, redis_client: Redis) -> None:
         redis_client.delete(CATALOG_FULL_KEY)
