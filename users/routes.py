@@ -1,0 +1,66 @@
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
+from app.apps.auth.providers import get_current_user, require_admin
+from app.apps.users.models import User
+from app.apps.users.providers import provide_user_service
+from app.apps.users.schemas import UserCreate, UserResponse, UserUpdate
+from app.apps.users.service import UserService
+from app.core.database import get_db
+
+
+router = APIRouter(prefix="/users", tags=["Users"])
+
+
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: Annotated[User, Depends(get_current_user)]) -> UserResponse:
+    return UserResponse.model_validate(current_user)
+
+
+@router.put("/me", response_model=UserResponse)
+def update_me(
+    data: UserUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    service: Annotated[UserService, Depends(provide_user_service)],
+) -> UserResponse:
+    return service.update_user(db, current_user.id, data)
+
+
+@router.post("", response_model=UserResponse, dependencies=[Depends(require_admin)])
+def create_user(
+    data: UserCreate,
+    db: Annotated[Session, Depends(get_db)],
+    service: Annotated[UserService, Depends(provide_user_service)],
+) -> UserResponse:
+    return service.register_user(db, data)
+
+
+@router.get("", response_model=list[UserResponse], dependencies=[Depends(require_admin)])
+def list_users(
+    db: Annotated[Session, Depends(get_db)],
+    service: Annotated[UserService, Depends(provide_user_service)],
+    limit: Annotated[int, Query(gt=0, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[UserResponse]:
+    return service.fetch_users(db, limit, offset)
+
+
+@router.get("/{user_id}", response_model=UserResponse, dependencies=[Depends(require_admin)])
+def get_user(
+    user_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    service: Annotated[UserService, Depends(provide_user_service)],
+) -> UserResponse:
+    return service.fetch_user(db, user_id)
+
+
+@router.delete("/{user_id}", response_model=UserResponse, dependencies=[Depends(require_admin)])
+def deactivate_user(
+    user_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    service: Annotated[UserService, Depends(provide_user_service)],
+) -> UserResponse:
+    return service.deactivate_user(db, user_id)
