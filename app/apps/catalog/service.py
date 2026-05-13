@@ -1,5 +1,4 @@
 from fastapi import HTTPException, status
-from redis import Redis
 from sqlalchemy.orm import Session
 
 from app.apps.catalog.models import ServiceItem
@@ -15,26 +14,17 @@ from app.apps.catalog.schemas import (
 )
 
 
-CATALOG_FULL_KEY = "catalog:full"
-CATALOG_TTL = 3600
-
-
 class CatalogService:
     def __init__(self, repository: CatalogRepository) -> None:
         self.repository = repository
 
-    def fetch_full_catalog(self, db: Session, redis_client: Redis) -> FullCatalogResponse:
-        if cached_catalog := redis_client.get(CATALOG_FULL_KEY):
-            return FullCatalogResponse.model_validate_json(cached_catalog)
-
-        catalog = FullCatalogResponse(
+    def fetch_full_catalog(self, db: Session) -> FullCatalogResponse:
+        return FullCatalogResponse(
             categories=[
                 CategoryCatalogResponse.model_validate(category)
                 for category in self.repository.get_full_catalog(db)
-            ],
+            ]
         )
-        redis_client.setex(CATALOG_FULL_KEY, CATALOG_TTL, catalog.model_dump_json())
-        return catalog
 
     def fetch_categories(self, db: Session) -> list[CategoryResponse]:
         return [CategoryResponse.model_validate(category) for category in self.repository.get_all_categories(db)]
@@ -45,22 +35,19 @@ class CatalogService:
     def fetch_item_by_id(self, db: Session, item_id: int) -> ServiceItemResponse:
         return ServiceItemResponse.model_validate(self._get_item_or_404(db, item_id))
 
-    def add_category(self, db: Session, redis_client: Redis, data: CategoryCreate) -> CategoryResponse:
+    def add_category(self, db: Session, data: CategoryCreate) -> CategoryResponse:
         self._validate_category_create(db, data)
         category = self.repository.create_category(db, data)
-        self._invalidate_cache(redis_client)
         return CategoryResponse.model_validate(category)
 
-    def add_item(self, db: Session, redis_client: Redis, data: ServiceItemCreate) -> ServiceItemResponse:
+    def add_item(self, db: Session, data: ServiceItemCreate) -> ServiceItemResponse:
         self._validate_item_create(db, data)
         item = self.repository.create_item(db, data)
-        self._invalidate_cache(redis_client)
         return ServiceItemResponse.model_validate(item)
 
     def update_item(
         self,
         db: Session,
-        redis_client: Redis,
         item_id: int,
         data: ServiceItemUpdate,
     ) -> ServiceItemResponse:
@@ -71,16 +58,14 @@ class CatalogService:
         if updated_item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")
 
-        self._invalidate_cache(redis_client)
         return ServiceItemResponse.model_validate(updated_item)
 
-    def remove_item(self, db: Session, redis_client: Redis, item_id: int) -> ServiceItemResponse:
+    def remove_item(self, db: Session, item_id: int) -> ServiceItemResponse:
         self._get_item_or_404(db, item_id)
         deleted_item = self.repository.soft_delete_item(db, item_id)
         if deleted_item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")
 
-        self._invalidate_cache(redis_client)
         return ServiceItemResponse.model_validate(deleted_item)
 
     def _get_item_or_404(self, db: Session, item_id: int) -> ServiceItem:
@@ -130,6 +115,3 @@ class CatalogService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Item name already exists in this category",
             )
-
-    def _invalidate_cache(self, redis_client: Redis) -> None:
-        redis_client.delete(CATALOG_FULL_KEY)

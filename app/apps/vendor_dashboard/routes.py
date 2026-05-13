@@ -2,10 +2,8 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from redis import Redis
 from sqlalchemy.orm import Session
 
-from app.apps.catalog.providers import provide_redis
 from app.apps.vendor_dashboard.providers import provide_vendor_service
 from app.apps.vendor_dashboard.schemas import (
     BulkStatusUpdate,
@@ -40,10 +38,9 @@ def update_vendor_profile(
     data: VendorProfileUpdate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
     db: Annotated[Session, Depends(get_db)],
-    redis_client: Annotated[Redis, Depends(provide_redis)],
     service: Annotated[VendorDashboardService, Depends(provide_vendor_service)],
 ) -> VendorProfileResponse:
-    return service.update_profile(db, redis_client, current_user.id, data)
+    return service.update_profile(db, current_user.id, data)
 
 
 @router.patch("/status", response_model=VendorProfileResponse)
@@ -51,20 +48,18 @@ def toggle_vendor_status(
     data: VendorStatusUpdate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
     db: Annotated[Session, Depends(get_db)],
-    redis_client: Annotated[Redis, Depends(provide_redis)],
     service: Annotated[VendorDashboardService, Depends(provide_vendor_service)],
 ) -> VendorProfileResponse:
-    return service.toggle_open_status(db, redis_client, current_user.id, data.is_open)
+    return service.toggle_open_status(db, current_user.id, data.is_open)
 
 
 @router.get("/dashboard", response_model=DashboardSummaryResponse)
 def get_dashboard(
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
     db: Annotated[Session, Depends(get_db)],
-    redis_client: Annotated[Redis, Depends(provide_redis)],
     service: Annotated[VendorDashboardService, Depends(provide_vendor_service)],
 ) -> DashboardSummaryResponse:
-    return service.fetch_dashboard(db, redis_client, current_user.id)
+    return service.fetch_dashboard(db, current_user.id)
 
 
 @router.patch("/orders/bulk-status", response_model=BulkStatusUpdateResponse)
@@ -72,10 +67,9 @@ def bulk_update_status(
     data: BulkStatusUpdate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
     db: Annotated[Session, Depends(get_db)],
-    redis_client: Annotated[Redis, Depends(provide_redis)],
     service: Annotated[VendorDashboardService, Depends(provide_vendor_service)],
 ) -> BulkStatusUpdateResponse:
-    return service.bulk_update_status(db, redis_client, current_user.id, data.order_ids, data.status)
+    return service.bulk_update_status(db, current_user.id, data.order_ids, data.status)
 
 
 @router.get("/capacity", response_model=VendorCapacityResponse)

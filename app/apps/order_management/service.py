@@ -1,8 +1,6 @@
-from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.apps.catalog.repository import CatalogRepository
@@ -44,7 +42,7 @@ class OrderService:
         order = self.order_repository.create_order(
             db,
             Order(
-                order_code=self._generate_unique_order_code(db),
+                order_code=self._generate_order_code(),
                 student_id=student_id,
                 vendor_id=data.vendor_id,
                 service_item_id=data.service_item_id,
@@ -54,13 +52,11 @@ class OrderService:
                 special_instructions=data.special_instructions,
             ),
         )
-        self._log_order_created(order, total_price)
         return OrderResponse.model_validate(order)
 
     def fetch_order(self, db: Session, order_code: str, student_id: int | None = None) -> OrderDetailResponse:
         order = self.order_repository.get_order_by_code(db, order_code)
         if order is None:
-            self._log_order_not_found(order_code)
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
         if student_id is not None and order.student_id != student_id:
@@ -83,8 +79,7 @@ class OrderService:
     ) -> OrderResponse:
         order = self._get_order_for_update_or_404(db, order_id)
         self._ensure_vendor_owns_order(order, changed_by)
-        previous_status = order.status
-        self._ensure_valid_transition(previous_status, status_update.status, order.order_code)
+        self._ensure_valid_transition(order.status, status_update.status)
 
         updated_order = self.order_repository.apply_status_transition(
             db,
@@ -92,13 +87,12 @@ class OrderService:
             status_update.status,
             OrderStatusLog(
                 order_id=order_id,
-                previous_status=previous_status,
+                previous_status=order.status,
                 new_status=status_update.status,
                 changed_by=changed_by,
                 note=status_update.note,
             ),
         )
-        self._log_status_updated(updated_order, previous_status, status_update.status, changed_by)
         return OrderResponse.model_validate(updated_order)
 
     def _calculate_total_price(self, db: Session, data: OrderCreate) -> float:
@@ -113,11 +107,8 @@ class OrderService:
         item_price = calculate_final_price(service_item.base_price, wash_type.price_multiplier)
         return round(item_price * data.quantity, 2)
 
-    def _generate_unique_order_code(self, db: Session) -> str:
-        while True:
-            order_code = f"ORD-{uuid4().hex[:8].upper()}"
-            if self.order_repository.get_order_by_code(db, order_code) is None:
-                return order_code
+    def _generate_order_code(self) -> str:
+        return f"ORD-{uuid4().hex[:8].upper()}"
 
     def _get_order_for_update_or_404(self, db: Session, order_id: int) -> Order:
         order = self.order_repository.get_order_by_id_for_update(db, order_id)
@@ -129,53 +120,12 @@ class OrderService:
         if order.vendor_id != vendor_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update your own orders")
 
-    def _ensure_valid_transition(self, previous: OrderStatus, new: OrderStatus, order_code: str) -> None:
-        if VALID_TRANSITIONS.get(previous) == new:
-            return
-
-        logger.warning(
-            "INVALID TRANSITION | {} -> {} | order={} timestamp={}",
-            previous.value,
-            new.value,
-            order_code,
-            self._timestamp(),
-        )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
+    def _ensure_valid_transition(self, previous_status: OrderStatus, new_status: OrderStatus) -> None:
+        if VALID_TRANSITIONS.get(previous_status) != new_status:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
 
     def _build_order_detail(self, order: Order, status_history: list[OrderStatusLog]) -> OrderDetailResponse:
         return OrderDetailResponse(
             **OrderResponse.model_validate(order).model_dump(),
             status_history=[OrderStatusLogResponse.model_validate(log) for log in status_history],
         )
-
-    def _log_order_created(self, order: Order, total_price: float) -> None:
-        logger.info(
-            "ORDER CREATED | code={} student={} vendor={} total=KES {} timestamp={}",
-            order.order_code,
-            order.student_id,
-            order.vendor_id,
-            total_price,
-            self._timestamp(),
-        )
-
-    def _log_order_not_found(self, order_code: str) -> None:
-        logger.warning("ORDER NOT FOUND | code={} timestamp={}", order_code, self._timestamp())
-
-    def _log_status_updated(
-        self,
-        order: Order,
-        previous_status: OrderStatus,
-        new_status: OrderStatus,
-        changed_by: int,
-    ) -> None:
-        logger.info(
-            "STATUS UPDATED | order={} {} -> {} changed_by={} timestamp={}",
-            order.order_code,
-            previous_status.value,
-            new_status.value,
-            changed_by,
-            self._timestamp(),
-        )
-
-    def _timestamp(self) -> str:
-        return datetime.now(UTC).isoformat()

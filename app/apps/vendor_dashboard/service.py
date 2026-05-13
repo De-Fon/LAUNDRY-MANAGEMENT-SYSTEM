@@ -1,8 +1,6 @@
-from datetime import UTC, date, datetime
+from datetime import date
 
 from fastapi import HTTPException, status
-from loguru import logger
-from redis import Redis
 from sqlalchemy.orm import Session
 
 from app.apps.order_management.models import Order, OrderStatus, OrderStatusLog
@@ -21,10 +19,6 @@ from app.apps.vendor_dashboard.schemas import (
 )
 
 
-DASHBOARD_KEY = "dashboard:{vendor_id}"
-DASHBOARD_TTL = 300
-
-
 class VendorDashboardService:
     def __init__(
         self,
@@ -38,52 +32,33 @@ class VendorDashboardService:
         if self.repository.get_vendor_profile(db, vendor_id) is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Vendor profile already exists")
 
-        profile = self.repository.create_vendor_profile(
-            db,
-            VendorProfile(vendor_id=vendor_id, **data.model_dump()),
-        )
+        profile = self.repository.create_vendor_profile(db, VendorProfile(vendor_id=vendor_id, **data.model_dump()))
         self.repository.create_vendor_capacity(db, self._build_capacity(vendor_id, date.today(), profile.max_orders_per_day))
-        self._log_profile_created(profile)
         return VendorProfileResponse.model_validate(profile)
 
     def update_profile(
         self,
         db: Session,
-        redis_client: Redis,
         vendor_id: int,
         data: VendorProfileUpdate,
     ) -> VendorProfileResponse:
-        self._get_profile_or_404(db, vendor_id)
         profile = self.repository.update_vendor_profile(db, vendor_id, data)
         if profile is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor profile not found")
-
-        self._invalidate_dashboard(redis_client, vendor_id)
-        self._log_profile_updated(vendor_id, list(data.model_dump(exclude_unset=True).keys()))
         return VendorProfileResponse.model_validate(profile)
 
     def toggle_open_status(
         self,
         db: Session,
-        redis_client: Redis,
         vendor_id: int,
         is_open: bool,
     ) -> VendorProfileResponse:
-        self._get_profile_or_404(db, vendor_id)
         profile = self.repository.toggle_vendor_open(db, vendor_id, is_open)
         if profile is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor profile not found")
-
-        self._invalidate_dashboard(redis_client, vendor_id)
-        self._log_status_toggled(vendor_id, is_open)
         return VendorProfileResponse.model_validate(profile)
 
-    def fetch_dashboard(self, db: Session, redis_client: Redis, vendor_id: int) -> DashboardSummaryResponse:
-        cache_key = self._dashboard_key(vendor_id)
-        if cached := redis_client.get(cache_key):
-            logger.info("CACHE HIT | dashboard vendor={} timestamp={}", vendor_id, self._timestamp())
-            return DashboardSummaryResponse.model_validate_json(cached)
-
+    def fetch_dashboard(self, db: Session, vendor_id: int) -> DashboardSummaryResponse:
         today = date.today()
         profile = self._get_profile_or_404(db, vendor_id)
         orders = self.repository.get_orders_today(db, vendor_id, today)
@@ -91,15 +66,11 @@ class VendorDashboardService:
         revenue = round(self.repository.get_revenue_today(db, vendor_id, today), 2)
         capacity = self.repository.get_vendor_capacity(db, vendor_id, today)
 
-        dashboard = self._build_dashboard(profile, today, orders, counts, revenue, capacity)
-        redis_client.setex(cache_key, DASHBOARD_TTL, dashboard.model_dump_json())
-        self._log_dashboard_fetched(vendor_id, len(orders), revenue)
-        return dashboard
+        return self._build_dashboard(profile, today, orders, counts, revenue, capacity)
 
     def bulk_update_status(
         self,
         db: Session,
-        redis_client: Redis,
         vendor_id: int,
         order_ids: list[int],
         new_status: OrderStatus,
@@ -124,22 +95,12 @@ class VendorDashboardService:
             )
             updated_count += 1
 
-        self._invalidate_dashboard(redis_client, vendor_id)
-        self._log_bulk_update(vendor_id, len(order_ids), new_status)
         return BulkStatusUpdateResponse(updated_count=updated_count)
 
     def check_capacity(self, db: Session, vendor_id: int, target_date: date) -> VendorCapacityResponse:
         capacity = self.repository.get_vendor_capacity(db, vendor_id, target_date)
         if capacity is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor capacity not initialized")
-
-        logger.info(
-            "CAPACITY CHECKED | vendor={} date={} available_slots={} timestamp={}",
-            vendor_id,
-            target_date,
-            capacity.available_slots,
-            self._timestamp(),
-        )
         return VendorCapacityResponse.model_validate(capacity)
 
     def is_vendor_available(self, db: Session, vendor_id: int) -> bool:
@@ -190,48 +151,3 @@ class VendorDashboardService:
 
     def _is_valid_transition(self, current_status: OrderStatus, new_status: OrderStatus) -> bool:
         return VALID_TRANSITIONS.get(current_status) == new_status
-
-    def _dashboard_key(self, vendor_id: int) -> str:
-        return DASHBOARD_KEY.format(vendor_id=vendor_id)
-
-    def _invalidate_dashboard(self, redis_client: Redis, vendor_id: int) -> None:
-        redis_client.delete(self._dashboard_key(vendor_id))
-
-    def _log_profile_created(self, profile: VendorProfile) -> None:
-        logger.info(
-            "VENDOR PROFILE CREATED | vendor={} name={} max_orders={} timestamp={}",
-            profile.vendor_id,
-            profile.business_name,
-            profile.max_orders_per_day,
-            self._timestamp(),
-        )
-
-    def _log_profile_updated(self, vendor_id: int, fields: list[str]) -> None:
-        logger.info("VENDOR PROFILE UPDATED | vendor={} fields={} timestamp={}", vendor_id, fields, self._timestamp())
-
-    def _log_status_toggled(self, vendor_id: int, is_open: bool) -> None:
-        label = "OPEN" if is_open else "CLOSED"
-        logger.info("VENDOR STATUS TOGGLED | vendor={} status={} timestamp={}", vendor_id, label, self._timestamp())
-        if not is_open:
-            logger.warning("VENDOR CLOSED | vendor={} is_open=False", vendor_id)
-
-    def _log_dashboard_fetched(self, vendor_id: int, total_orders: int, revenue: float) -> None:
-        logger.info(
-            "DASHBOARD FETCHED | vendor={} orders={} revenue=KES {} timestamp={}",
-            vendor_id,
-            total_orders,
-            revenue,
-            self._timestamp(),
-        )
-
-    def _log_bulk_update(self, vendor_id: int, order_count: int, new_status: OrderStatus) -> None:
-        logger.info(
-            "BULK STATUS UPDATE | vendor={} order_count={} new_status={} timestamp={}",
-            vendor_id,
-            order_count,
-            new_status.value,
-            self._timestamp(),
-        )
-
-    def _timestamp(self) -> str:
-        return datetime.now(UTC).isoformat()

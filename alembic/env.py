@@ -3,12 +3,19 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from app.apps.analytics import models as analytics_models  # noqa: F401
+from app.apps.auth import models as auth_models  # noqa: F401
 from app.apps.catalog import models as catalog_models  # noqa: F401
 from app.apps.credit_tab import models as credit_tab_models  # noqa: F401
+from app.apps.health import models as health_models  # noqa: F401
+from app.apps.idempotency import models as idempotency_models  # noqa: F401
 from app.apps.ledger import models as ledger_models  # noqa: F401
 from app.apps.order_management import models as order_management_models  # noqa: F401
+from app.apps.payments import models as payments_models  # noqa: F401
 from app.apps.pricing import models as pricing_models  # noqa: F401
+from app.apps.users import models as users_models  # noqa: F401
 from app.apps.vendor_dashboard import models as vendor_dashboard_models  # noqa: F401
+from app.apps.waitlist import models as waitlist_models  # noqa: F401
 from app.core.database import Base
 from app.core.settings import get_settings
 
