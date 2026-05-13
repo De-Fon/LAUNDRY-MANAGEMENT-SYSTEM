@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.apps.catalog import models as catalog_models  # noqa: F401
 from app.apps.credit_tab import models as credit_tab_models  # noqa: F401
+from app.apps.ledger import models as ledger_models  # noqa: F401
 from app.apps.order_management import models as order_management_models  # noqa: F401
 from app.apps.pricing import models as pricing_models  # noqa: F401
 from app.apps.vendor_dashboard import models as vendor_dashboard_models  # noqa: F401

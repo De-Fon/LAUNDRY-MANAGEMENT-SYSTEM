@@ -74,10 +74,6 @@ class CreditRepository:
         db.refresh(payment)
         return payment
 
-    def get_payment_by_idempotency_key(self, db: Session, key: str) -> CreditPayment | None:
-        statement = select(CreditPayment).where(CreditPayment.idempotency_key == key)
-        return db.scalar(statement)
-
     def get_payments_by_tab(self, db: Session, tab_id: int) -> list[CreditPayment]:
         statement = (
             select(CreditPayment)

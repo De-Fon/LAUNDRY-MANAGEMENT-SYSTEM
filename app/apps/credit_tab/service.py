@@ -14,11 +14,17 @@ from app.apps.credit_tab.schemas import (
     CreditTabResponse,
     DebtReminderSummary,
 )
+from app.apps.idempotency.service import IdempotencyService
 
 
 class CreditService:
-    def __init__(self, repository: CreditRepository) -> None:
+    def __init__(
+        self,
+        repository: CreditRepository,
+        idempotency_service: IdempotencyService,
+    ) -> None:
         self.repository = repository
+        self.idempotency_service = idempotency_service
 
     def open_credit_tab(self, db: Session, vendor_id: int, data: CreditTabCreate) -> CreditTabResponse:
         if data.vendor_id != vendor_id:
@@ -59,8 +65,8 @@ class CreditService:
         return [CreditTabResponse.model_validate(tab) for tab in self.repository.get_unpaid_tabs_by_student(db, student_id)]
 
     def record_payment(self, db: Session, vendor_id: int, data: CreditPaymentCreate) -> CreditPaymentResponse:
-        if payment := self.repository.get_payment_by_idempotency_key(db, data.idempotency_key):
-            self._log_duplicate_payment(data.idempotency_key, payment.credit_tab_id)
+        if payment := self.idempotency_service.find_duplicate(db, CreditPayment, data.idempotency_key):
+            self.idempotency_service.log_duplicate(data.idempotency_key, "PAYMENT", payment.credit_tab_id)
             return CreditPaymentResponse.model_validate(payment)
 
         tab = self._get_tab_for_payment(db, data.credit_tab_id, vendor_id)
@@ -165,9 +171,6 @@ class CreditService:
             new_status.value,
             self._timestamp(),
         )
-
-    def _log_duplicate_payment(self, key: str, tab_id: int) -> None:
-        logger.warning("DUPLICATE PAYMENT BLOCKED | key={} tab={} timestamp={}", key, tab_id, self._timestamp())
 
     def _log_reminder(self, student_id: int, total_tabs: int, total_outstanding: float) -> None:
         logger.info(

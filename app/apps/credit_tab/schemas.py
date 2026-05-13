@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.apps.credit_tab.models import CreditStatus
+from app.apps.idempotency.schemas import IdempotencyKeySchema
 
 
 class CreditTabCreate(BaseModel):
@@ -13,11 +14,10 @@ class CreditTabCreate(BaseModel):
     due_date: datetime | None = None
 
 
-class CreditPaymentCreate(BaseModel):
+class CreditPaymentCreate(IdempotencyKeySchema):
     credit_tab_id: int
     amount_paid: float = Field(..., gt=0)
     payment_method: str = Field(..., min_length=1, max_length=100)
-    idempotency_key: str = Field(..., min_length=1, max_length=255)
     note: str | None = None
 
 
