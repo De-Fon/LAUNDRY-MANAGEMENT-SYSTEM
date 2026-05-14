@@ -1,20 +1,20 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.apps.auth.providers import get_current_user
 from app.apps.users.models import User
 from app.apps.waitlist.providers import provide_waitlist_service
 from app.apps.waitlist.schemas import WaitlistEntryCreate, WaitlistEntryResponse, WaitlistStatusUpdate
 from app.apps.waitlist.service import WaitlistService
 from app.core.database import get_db
+from app.shared.auth import get_current_user
 
 
 router = APIRouter(prefix="/waitlist", tags=["Waitlist"])
 
 
-@router.post("", response_model=WaitlistEntryResponse)
+@router.post("", response_model=WaitlistEntryResponse, status_code=status.HTTP_201_CREATED)
 def join_waitlist(
     data: WaitlistEntryCreate,
     current_user: Annotated[User, Depends(get_current_user)],

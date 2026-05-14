@@ -1,20 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.apps.auth.providers import get_current_user, provide_auth_service
+from app.apps.auth.providers import provide_auth_service
 from app.apps.auth.schemas import LoginRequest, OTPVerifyRequest, RegisterRequest, TokenResponse
 from app.apps.auth.service import AuthService
 from app.apps.users.models import User
 from app.apps.users.schemas import UserResponse
 from app.core.database import get_db
+from app.shared.auth import get_current_user
 
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(
     data: RegisterRequest,
     db: Annotated[Session, Depends(get_db)],

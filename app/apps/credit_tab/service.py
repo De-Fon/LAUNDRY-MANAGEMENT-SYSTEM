@@ -11,11 +11,13 @@ from app.apps.credit_tab.schemas import (
     CreditTabResponse,
     DebtReminderSummary,
 )
+from app.apps.idempotency.service import IdempotencyService
 
 
 class CreditService:
-    def __init__(self, repository: CreditRepository) -> None:
+    def __init__(self, repository: CreditRepository, idempotency_service: IdempotencyService) -> None:
         self.repository = repository
+        self.idempotency_service = idempotency_service
 
     def open_credit_tab(self, db: Session, vendor_id: int, data: CreditTabCreate) -> CreditTabResponse:
         if data.vendor_id != vendor_id:
@@ -55,6 +57,11 @@ class CreditService:
         return [CreditTabResponse.model_validate(tab) for tab in self.repository.get_unpaid_tabs_by_student(db, student_id)]
 
     def record_payment(self, db: Session, vendor_id: int, data: CreditPaymentCreate) -> CreditPaymentResponse:
+        duplicate = self.idempotency_service.find_duplicate(db, CreditPayment, data.idempotency_key)
+        if duplicate is not None:
+            self.idempotency_service.log_duplicate(data.idempotency_key, "CREDIT_PAYMENT", vendor_id)
+            return CreditPaymentResponse.model_validate(duplicate)
+
         tab = self._get_tab_for_payment(db, data.credit_tab_id, vendor_id)
         self._validate_payment_amount(tab, data.amount_paid)
 
@@ -69,6 +76,7 @@ class CreditService:
                 credit_tab_id=data.credit_tab_id,
                 amount_paid=data.amount_paid,
                 payment_method=data.payment_method,
+                idempotency_key=data.idempotency_key,
                 note=data.note,
             ),
             new_amount_paid,

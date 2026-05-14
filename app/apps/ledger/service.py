@@ -1,6 +1,9 @@
+from uuid import uuid4
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.apps.idempotency.service import IdempotencyService
 from app.apps.ledger.models import LedgerAccount, LedgerAuditLog, LedgerTransaction, TransactionStatus, TransactionType
 from app.apps.ledger.repository import LedgerRepository
 from app.apps.ledger.schemas import (
@@ -16,8 +19,9 @@ from app.apps.ledger.schemas import (
 
 
 class LedgerService:
-    def __init__(self, repository: LedgerRepository) -> None:
+    def __init__(self, repository: LedgerRepository, idempotency_service: IdempotencyService) -> None:
         self.repository = repository
+        self.idempotency_service = idempotency_service
 
     def open_ledger_account(self, db: Session, data: LedgerAccountCreate) -> LedgerAccountResponse:
         if self.repository.get_account_by_student_and_vendor(db, data.student_id, data.vendor_id) is not None:
@@ -57,6 +61,11 @@ class LedgerService:
         data: LedgerTransactionCreate,
         performed_by: int,
     ) -> LedgerTransactionResponse:
+        duplicate = self.idempotency_service.find_duplicate(db, LedgerTransaction, data.idempotency_key)
+        if duplicate is not None:
+            self.idempotency_service.log_duplicate(data.idempotency_key, "LEDGER_TRANSACTION", performed_by)
+            return LedgerTransactionResponse.model_validate(duplicate)
+
         account = self._get_account_or_404(db, data.ledger_account_id)
         self._ensure_vendor_owns_account(account, performed_by)
 
@@ -68,8 +77,8 @@ class LedgerService:
             transaction_status=TransactionStatus.PENDING,
             amount=self._money(data.amount),
             reference_code=self._generate_reference_code(db),
+            idempotency_key=data.idempotency_key,
             description=data.description,
-            performed_by=performed_by,
         )
         audit_log = LedgerAuditLog(
             ledger_account_id=account.id,
@@ -101,7 +110,6 @@ class LedgerService:
         balances = self._reverse_balance_effect(account, transaction)
         audit_log = LedgerAuditLog(
             ledger_account_id=account.id,
-            transaction_id=transaction.id,
             previous_balance=account.total_outstanding,
             new_balance=balances[2],
             action="REVERSAL",
@@ -115,14 +123,17 @@ class LedgerService:
         if data.transaction_type not in {TransactionType.ADJUSTMENT, TransactionType.CREDIT, TransactionType.DEBIT}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid adjustment transaction type")
 
-        return self.record_transaction(db, LedgerTransactionCreate(
-            ledger_account_id=data.ledger_account_id,
-            order_id=data.order_id,
-            transaction_type=data.transaction_type,
-            amount=data.amount,
-            description=data.reason,
-            idempotency_key="",
-        ), data.performed_by)
+        return self.record_transaction(
+            db,
+            LedgerTransactionCreate(
+                ledger_account_id=data.ledger_account_id,
+                transaction_type=data.transaction_type,
+                amount=data.amount,
+                description=data.reason,
+                idempotency_key=data.idempotency_key,
+            ),
+            data.performed_by,
+        )
 
     def fetch_audit_logs(self, db: Session, account_id: int, vendor_id: int) -> list[LedgerAuditLogResponse]:
         account = self._get_account_by_id_or_404(db, account_id)

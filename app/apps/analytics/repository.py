@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -33,26 +33,29 @@ class AnalyticsRepository:
         return result or 0.0
 
     def get_refunds_in_period(self, db: Session, vendor_id: int, start: date, end: date) -> float:
-        from app.apps.ledger.models import LedgerTransaction, TransactionType
-        statement = select(func.sum(LedgerTransaction.amount)).where(
-            LedgerTransaction.transaction_type == TransactionType.REFUND,
-            LedgerTransaction.created_at >= start,
-            LedgerTransaction.created_at < end + timedelta(days=1),
-            # Assuming vendor_id is linked via account
-            # Need to join with LedgerAccount for vendor_id
+        from app.apps.ledger.models import LedgerAccount, LedgerTransaction, TransactionType
+
+        statement = (
+            select(func.coalesce(func.sum(LedgerTransaction.amount), 0.0))
+            .join(LedgerAccount, LedgerTransaction.ledger_account_id == LedgerAccount.id)
+            .where(
+                LedgerAccount.vendor_id == vendor_id,
+                LedgerTransaction.transaction_type == TransactionType.REFUND,
+                LedgerTransaction.created_at >= start,
+                LedgerTransaction.created_at < end + timedelta(days=1),
+            )
         )
-        # Placeholder: implement proper join
         result = db.scalar(statement)
-        return result or 0.0
+        return float(result or 0.0)
 
     def get_outstanding_in_period(self, db: Session, vendor_id: int, start: date, end: date) -> float:
         from app.apps.ledger.models import LedgerAccount
-        statement = select(func.sum(LedgerAccount.total_outstanding)).where(
+
+        statement = select(func.coalesce(func.sum(LedgerAccount.total_outstanding), 0.0)).where(
             LedgerAccount.vendor_id == vendor_id,
-            # Assuming period based on account creation or last update
         )
         result = db.scalar(statement)
-        return result or 0.0
+        return float(result or 0.0)
 
     def get_order_count_by_status(self, db: Session, vendor_id: int, start: date, end: date) -> dict[str, int]:
         statement = select(Order.status, func.count(Order.id)).where(

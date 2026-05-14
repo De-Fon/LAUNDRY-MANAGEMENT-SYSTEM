@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.apps.ledger.providers import provide_ledger_service
@@ -43,7 +43,7 @@ def get_my_ledger_summary(
     return service.fetch_account_summary(db, current_user.id, vendor_id)
 
 
-@router.post("/accounts", response_model=LedgerAccountResponse)
+@router.post("/accounts", response_model=LedgerAccountResponse, status_code=status.HTTP_201_CREATED)
 def create_ledger_account(
     data: LedgerAccountCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
@@ -53,7 +53,7 @@ def create_ledger_account(
     return service.open_ledger_account(db, LedgerAccountCreate(student_id=data.student_id, vendor_id=current_user.id))
 
 
-@router.post("/transactions", response_model=LedgerTransactionResponse)
+@router.post("/transactions", response_model=LedgerTransactionResponse, status_code=status.HTTP_201_CREATED)
 def create_ledger_transaction(
     data: LedgerTransactionCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
@@ -63,7 +63,7 @@ def create_ledger_transaction(
     return service.record_transaction(db, data, current_user.id)
 
 
-@router.post("/transactions/reverse", response_model=LedgerTransactionResponse)
+@router.post("/transactions/reverse", response_model=LedgerTransactionResponse, status_code=status.HTTP_201_CREATED)
 def reverse_ledger_transaction(
     data: LedgerReverseCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
@@ -73,7 +73,7 @@ def reverse_ledger_transaction(
     return service.reverse_transaction(db, data.reference_code, current_user.id, data.reason)
 
 
-@router.post("/adjust", response_model=LedgerTransactionResponse)
+@router.post("/adjust", response_model=LedgerTransactionResponse, status_code=status.HTTP_201_CREATED)
 def apply_ledger_adjustment(
     data: LedgerAdjustmentCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],

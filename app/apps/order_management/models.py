@@ -15,6 +15,7 @@ class OrderStatus(str, enum.Enum):
     READY = "READY"
     WAITING_TO_PICK = "WAITING_TO_PICK"
     PICKED_UP = "PICKED_UP"
+    CANCELLED = "CANCELLED"
 
 
 class Order(Base):
@@ -43,6 +44,7 @@ class Order(Base):
     )
 
     service_item: Mapped[ServiceItem] = relationship()
+    payments: Mapped[list["Payment"]] = relationship(back_populates="order")
     status_history: Mapped[list["OrderStatusLog"]] = relationship(
         back_populates="order",
         cascade="all, delete-orphan",

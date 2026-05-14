@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.apps.credit_tab.providers import provide_credit_service
@@ -38,7 +38,7 @@ def get_my_unpaid_credit_tabs(
     return service.fetch_unpaid_tabs(db, current_user.id)
 
 
-@router.post("/open", response_model=CreditTabResponse)
+@router.post("/open", response_model=CreditTabResponse, status_code=status.HTTP_201_CREATED)
 def open_credit_tab(
     data: CreditTabCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
@@ -57,7 +57,7 @@ def get_vendor_credit_tabs(
     return service.fetch_vendor_tabs(db, current_user.id)
 
 
-@router.post("/pay", response_model=CreditPaymentResponse)
+@router.post("/pay", response_model=CreditPaymentResponse, status_code=status.HTTP_201_CREATED)
 def record_credit_payment(
     data: CreditPaymentCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],

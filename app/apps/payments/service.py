@@ -1,32 +1,40 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.apps.bookings.models import BookingStatus
-from app.apps.payments.models import PaymentStatus
+from app.apps.idempotency.service import IdempotencyService
+from app.apps.order_management.models import OrderStatus
+from app.apps.payments.models import Payment, PaymentStatus
 from app.apps.payments.repository import PaymentRepository
 from app.apps.payments.schemas import PaymentCreate, PaymentResponse, PaymentStatusUpdate
 from app.apps.users.models import RoleEnum, User
 
 
 class PaymentService:
-    def __init__(self, repository: PaymentRepository) -> None:
+    def __init__(self, repository: PaymentRepository, idempotency_service: IdempotencyService) -> None:
         self.repository = repository
+        self.idempotency_service = idempotency_service
 
     def create_payment(self, db: Session, current_user: User, data: PaymentCreate) -> PaymentResponse:
-        booking = self.repository.get_booking(db, data.booking_id)
-        if booking is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
-        if booking.customer_id != current_user.id and current_user.role != RoleEnum.admin:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Booking is not available")
-        if booking.status == BookingStatus.cancelled:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cancelled bookings cannot be paid")
+        duplicate = self.idempotency_service.find_duplicate(db, Payment, data.idempotency_key)
+        if duplicate is not None:
+            self.idempotency_service.log_duplicate(data.idempotency_key, "PAYMENT", current_user.id)
+            return PaymentResponse.model_validate(duplicate)
+
+        order = self.repository.get_order(db, data.order_id)
+        if order is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        if order.student_id != current_user.id and current_user.role != RoleEnum.admin:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Order is not available")
+        if order.status == OrderStatus.CANCELLED:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cancelled orders cannot be paid")
 
         payment = self.repository.create_payment(
             db,
-            booking_id=booking.id,
-            customer_id=booking.customer_id,
-            amount=booking.total_amount,
+            order_id=order.id,
+            student_id=order.student_id,
+            amount=order.total_price,
             method=data.method,
+            idempotency_key=data.idempotency_key,
             provider_reference=data.provider_reference,
         )
         return PaymentResponse.model_validate(payment)
@@ -40,7 +48,7 @@ class PaymentService:
         if payment is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
 
-        if payment.status in {PaymentStatus.paid, PaymentStatus.refunded} and data.status != PaymentStatus.refunded:
+        if payment.status in {PaymentStatus.PAID, PaymentStatus.REFUNDED} and data.status != PaymentStatus.REFUNDED:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment status cannot be changed")
 
         updated_payment = self.repository.update_status(

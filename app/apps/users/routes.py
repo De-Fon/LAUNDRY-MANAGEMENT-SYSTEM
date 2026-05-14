@@ -1,14 +1,14 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.apps.auth.providers import get_current_user, require_admin
 from app.apps.users.models import User
 from app.apps.users.providers import provide_user_service
 from app.apps.users.schemas import UserCreate, UserResponse, UserUpdate
 from app.apps.users.service import UserService
 from app.core.database import get_db
+from app.shared.auth import get_current_user, require_admin
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -29,7 +29,7 @@ def update_me(
     return service.update_user(db, current_user.id, data)
 
 
-@router.post("", response_model=UserResponse, dependencies=[Depends(require_admin)])
+@router.post("", response_model=UserResponse, dependencies=[Depends(require_admin)], status_code=status.HTTP_201_CREATED)
 def create_user(
     data: UserCreate,
     db: Annotated[Session, Depends(get_db)],

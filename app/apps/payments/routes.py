@@ -1,20 +1,20 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.apps.auth.providers import get_current_user, require_vendor
 from app.apps.payments.providers import provide_payment_service
 from app.apps.payments.schemas import PaymentCreate, PaymentResponse, PaymentStatusUpdate
 from app.apps.payments.service import PaymentService
 from app.apps.users.models import User
 from app.core.database import get_db
+from app.shared.auth import get_current_user, require_vendor
 
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
 
-@router.post("", response_model=PaymentResponse)
+@router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 def create_payment(
     data: PaymentCreate,
     current_user: Annotated[User, Depends(get_current_user)],

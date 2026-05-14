@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.apps.order_management.providers import provide_order_service
@@ -13,7 +13,7 @@ from app.shared.auth import AuthenticatedUser, require_student, require_vendor
 router = APIRouter(prefix="/orders", tags=["Order Management"])
 
 
-@router.post("/", response_model=OrderResponse)
+@router.post("/", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 def create_order(
     data: OrderCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_student)],

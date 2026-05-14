@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.apps.vendor_dashboard.providers import provide_vendor_service
@@ -23,7 +23,7 @@ from app.shared.auth import AuthenticatedUser, require_vendor
 router = APIRouter(prefix="/vendor", tags=["Vendor Dashboard"])
 
 
-@router.post("/profile", response_model=VendorProfileResponse)
+@router.post("/profile", response_model=VendorProfileResponse, status_code=status.HTTP_201_CREATED)
 def create_vendor_profile(
     data: VendorProfileCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],

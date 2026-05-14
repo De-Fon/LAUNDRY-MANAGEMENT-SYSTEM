@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.apps.pricing.providers import provide_pricing_service, require_vendor
@@ -29,7 +29,7 @@ def calculate_price(
     return service.calculate_price(base_price, multiplier)
 
 
-@router.post("/wash-types", response_model=WashTypeResponse, dependencies=[Depends(require_vendor)])
+@router.post("/wash-types", response_model=WashTypeResponse, dependencies=[Depends(require_vendor)], status_code=status.HTTP_201_CREATED)
 def create_wash_type(
     data: WashTypeCreate,
     db: Annotated[Session, Depends(get_db)],

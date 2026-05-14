@@ -10,30 +10,34 @@ from app.core.database import Base
 
 
 class PaymentMethod(str, enum.Enum):
-    cash = "cash"
-    mpesa = "mpesa"
-    card = "card"
-    bank_transfer = "bank_transfer"
+    CASH = "cash"
+    MPESA = "mpesa"
+    CARD = "card"
+    BANK_TRANSFER = "bank_transfer"
 
 
 class PaymentStatus(str, enum.Enum):
-    pending = "pending"
-    processing = "processing"
-    paid = "paid"
-    failed = "failed"
-    refunded = "refunded"
+    PENDING = "pending"
+    PROCESSING = "processing"
+    PAID = "paid"
+    FAILED = "failed"
+    REFUNDED = "refunded"
 
 
 class Payment(Base):
     __tablename__ = "payments"
-    __table_args__ = (UniqueConstraint("provider_reference", name="uq_payments_provider_reference"),)
+    __table_args__ = (
+        UniqueConstraint("provider_reference", name="uq_payments_provider_reference"),
+        UniqueConstraint("idempotency_key", name="uq_payments_idempotency_key"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), index=True, nullable=False)
-    customer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True, nullable=False)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     method: Mapped[PaymentMethod] = mapped_column(Enum(PaymentMethod), nullable=False)
-    status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.pending, nullable=False)
+    status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
     provider_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -45,6 +49,5 @@ class Payment(Base):
         nullable=False,
     )
 
-    booking: Mapped["Booking"] = relationship(back_populates="payments")
-    customer: Mapped["User"] = relationship(back_populates="payments")
-
+    order: Mapped["Order"] = relationship(back_populates="payments")
+    student: Mapped["User"] = relationship(back_populates="payments")

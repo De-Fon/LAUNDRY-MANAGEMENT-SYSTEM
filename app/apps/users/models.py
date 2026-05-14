@@ -35,10 +35,5 @@ class User(Base):
         nullable=False,
     )
 
-    bookings: Mapped[list["Booking"]] = relationship(
-        back_populates="customer",
-        foreign_keys="Booking.customer_id",
-    )
-    payments: Mapped[list["Payment"]] = relationship(back_populates="customer")
-    notifications: Mapped[list["Notification"]] = relationship(back_populates="user")
+    payments: Mapped[list["Payment"]] = relationship(back_populates="student")
     waitlist_entries: Mapped[list["WaitlistEntry"]] = relationship(back_populates="customer")
