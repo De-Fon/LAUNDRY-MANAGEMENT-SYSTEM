@@ -5,11 +5,13 @@ from sqlalchemy import engine_from_config, pool
 
 from app.apps.analytics import models as analytics_models  # noqa: F401
 from app.apps.auth import models as auth_models  # noqa: F401
+from app.apps.bookings import models as bookings_models  # noqa: F401
 from app.apps.catalog import models as catalog_models  # noqa: F401
 from app.apps.credit_tab import models as credit_tab_models  # noqa: F401
 from app.apps.health import models as health_models  # noqa: F401
 from app.apps.idempotency import models as idempotency_models  # noqa: F401
 from app.apps.ledger import models as ledger_models  # noqa: F401
+from app.apps.notifications import models as notifications_models  # noqa: F401
 from app.apps.order_management import models as order_management_models  # noqa: F401
 from app.apps.payments import models as payments_models  # noqa: F401
 from app.apps.pricing import models as pricing_models  # noqa: F401
