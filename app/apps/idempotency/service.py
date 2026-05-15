@@ -20,8 +20,5 @@ class IdempotencyService:
             resource_type,
             idempotency_key,
             resource_owner_id,
-            self._timestamp(),
+            datetime.now(UTC).isoformat(),
         )
-
-    def _timestamp(self) -> str:
-        return datetime.now(UTC).isoformat()

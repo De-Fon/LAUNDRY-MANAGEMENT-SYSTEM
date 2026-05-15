@@ -36,13 +36,15 @@ class AuthService:
             role=data.role,
             student_id=data.student_id,
         )
-        return self._issue_token(user)
+        token = create_access_token(str(user.id), {"role": user.role.value})
+        return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
     def login(self, db: Session, data: LoginRequest) -> TokenResponse:
         user = self.auth_repository.get_user_by_email(db, str(data.email))
         if user is None or not verify_password(data.password, user.password_hash):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
-        return self._issue_token(user)
+        token = create_access_token(str(user.id), {"role": user.role.value})
+        return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
     def get_current_user(self, db: Session, token: str) -> User:
         credentials_exception = HTTPException(
@@ -95,6 +97,4 @@ class AuthService:
         verified_user = self.auth_repository.mark_user_verified(db, user)
         return UserResponse.model_validate(verified_user)
 
-    def _issue_token(self, user: User) -> TokenResponse:
-        token = create_access_token(str(user.id), {"role": user.role.value})
-        return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
+

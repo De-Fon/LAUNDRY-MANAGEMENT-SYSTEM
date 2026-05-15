@@ -49,4 +49,6 @@ class CategoryCatalogResponse(CategoryResponse):
 
 
 class FullCatalogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     categories: list[CategoryCatalogResponse]

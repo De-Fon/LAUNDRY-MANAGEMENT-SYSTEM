@@ -6,9 +6,8 @@ from sqlalchemy.orm import Session
 from app.apps.bookings.providers import provide_booking_service
 from app.apps.bookings.schemas import BookingCreate, BookingResponse, BookingStatusUpdate
 from app.apps.bookings.service import BookingService
-from app.apps.users.models import User
 from app.core.database import get_db
-from app.shared.auth import get_current_user, require_vendor
+from app.shared.auth import AuthenticatedUser, get_current_user, require_vendor
 
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
@@ -17,7 +16,7 @@ router = APIRouter(prefix="/bookings", tags=["Bookings"])
 @router.post("", response_model=BookingResponse)
 def create_booking(
     data: BookingCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[BookingService, Depends(provide_booking_service)],
 ) -> BookingResponse:
@@ -26,7 +25,7 @@ def create_booking(
 
 @router.get("/me", response_model=list[BookingResponse])
 def get_my_bookings(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[BookingService, Depends(provide_booking_service)],
 ) -> list[BookingResponse]:
@@ -36,7 +35,7 @@ def get_my_bookings(
 @router.get("/{booking_id}", response_model=BookingResponse)
 def get_booking(
     booking_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[BookingService, Depends(provide_booking_service)],
 ) -> BookingResponse:
@@ -47,7 +46,7 @@ def get_booking(
 def update_booking_status(
     booking_id: int,
     data: BookingStatusUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[BookingService, Depends(provide_booking_service)],
 ) -> BookingResponse:
@@ -57,7 +56,7 @@ def update_booking_status(
 @router.post("/{booking_id}/cancel", response_model=BookingResponse)
 def cancel_booking(
     booking_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[BookingService, Depends(provide_booking_service)],
 ) -> BookingResponse:

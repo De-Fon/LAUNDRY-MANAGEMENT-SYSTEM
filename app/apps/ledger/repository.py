@@ -14,7 +14,7 @@ class LedgerRepository:
     def get_account_by_student(self, db: Session, student_id: int) -> LedgerAccount | None:
         statement = (
             select(LedgerAccount)
-            .options(joinedload(LedgerAccount.transactions))
+            .options(joinedload(LedgerAccount.transactions).joinedload(LedgerTransaction.order))
             .where(LedgerAccount.student_id == student_id)
         )
         return db.scalars(statement).unique().first()
@@ -22,7 +22,7 @@ class LedgerRepository:
     def get_account_by_id(self, db: Session, account_id: int) -> LedgerAccount | None:
         statement = (
             select(LedgerAccount)
-            .options(joinedload(LedgerAccount.transactions))
+            .options(joinedload(LedgerAccount.transactions).joinedload(LedgerTransaction.order))
             .where(LedgerAccount.id == account_id)
         )
         return db.scalars(statement).unique().first()
@@ -30,7 +30,7 @@ class LedgerRepository:
     def get_account_by_id_for_update(self, db: Session, account_id: int) -> LedgerAccount | None:
         statement = (
             select(LedgerAccount)
-            .options(joinedload(LedgerAccount.transactions))
+            .options(joinedload(LedgerAccount.transactions).joinedload(LedgerTransaction.order))
             .where(LedgerAccount.id == account_id)
             .with_for_update()
         )
@@ -44,7 +44,7 @@ class LedgerRepository:
     ) -> LedgerAccount | None:
         statement = (
             select(LedgerAccount)
-            .options(joinedload(LedgerAccount.transactions))
+            .options(joinedload(LedgerAccount.transactions).joinedload(LedgerTransaction.order))
             .where(LedgerAccount.student_id == student_id, LedgerAccount.vendor_id == vendor_id)
         )
         return db.scalars(statement).unique().first()

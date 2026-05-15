@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload, with_loader_criteria
+from sqlalchemy.orm import Session, joinedload, with_loader_criteria
 
 from app.apps.catalog.models import Category, ServiceItem
 from app.apps.catalog.schemas import CategoryCreate, ServiceItemCreate, ServiceItemUpdate
@@ -83,10 +83,10 @@ class CatalogRepository:
         categories_statement = (
             select(Category)
             .options(
-                selectinload(Category.items).joinedload(ServiceItem.category),
+                joinedload(Category.items),
                 with_loader_criteria(ServiceItem, ServiceItem.is_active.is_(True)),
             )
             .where(Category.is_active.is_(True))
             .order_by(Category.name)
         )
-        return list(db.scalars(categories_statement).all())
+        return list(db.scalars(categories_statement).unique().all())

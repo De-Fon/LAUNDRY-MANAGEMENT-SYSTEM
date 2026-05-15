@@ -7,12 +7,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    app_name: str = "Laundry Management System"
+    app_name: str = "Campus Laundry O2O System"
     debug: bool = False
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/laundry_management"
-    redis_url: str = "redis://localhost:6379/0"
+    database_url: str = "sqlite:///./laundry_management.db"
+    redis_url: str = "redis://localhost:6379"
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 30
+
+    resend_api_key: str | None = None
+    resend_from_email: str = "notifications@campuslaundry.co.ke"
+    resend_from_name: str = "Campus Laundry"
+    
+    environment: str = "development"
+    algorithm: str = "HS256"
+    at_api_key: str | None = None
+    at_username: str | None = "sandbox"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Request
 from sqlalchemy.orm import Session
+from app.core.limiter import limiter
 
 from app.apps.order_management.providers import provide_order_service
 from app.apps.order_management.schemas import OrderCreate, OrderDetailResponse, OrderResponse, OrderStatusUpdate
@@ -14,7 +15,9 @@ router = APIRouter(prefix="/orders", tags=["Order Management"])
 
 
 @router.post("/", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 def create_order(
+    request: Request,
     data: OrderCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_student)],
     db: Annotated[Session, Depends(get_db)],
@@ -42,7 +45,9 @@ def get_vendor_orders(
 
 
 @router.patch("/{order_id}/status", response_model=OrderResponse)
+@limiter.limit("30/minute")
 def update_order_status(
+    request: Request,
     order_id: int,
     data: OrderStatusUpdate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
@@ -53,7 +58,9 @@ def update_order_status(
 
 
 @router.get("/{order_code}", response_model=OrderDetailResponse)
+@limiter.limit("60/minute")
 def get_order(
+    request: Request,
     order_code: str,
     current_user: Annotated[AuthenticatedUser, Depends(require_student)],
     db: Annotated[Session, Depends(get_db)],

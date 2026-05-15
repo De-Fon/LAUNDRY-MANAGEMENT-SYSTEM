@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.apps.users.models import RoleEnum
 from app.apps.users.schemas import UserCreate, UserResponse
@@ -14,6 +14,8 @@ class LoginRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     access_token: str
     token_type: str = "bearer"
     user: UserResponse

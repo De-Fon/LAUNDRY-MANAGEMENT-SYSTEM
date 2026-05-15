@@ -34,3 +34,8 @@ env/
 
 # Local architecture notes
 ARCHITECTURE.md
+commands.md
+
+# Logs
+logs/
+logs/*.log

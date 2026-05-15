@@ -21,7 +21,20 @@ class AnalyticsService:
         self.repository = repository
 
     def generate_report(self, db: Session, vendor_id: int, data: AnalyticsRequest) -> FullAnalyticsReportResponse:
-        period_start, period_end = self._resolve_period(data.report_type, data.period_start, data.period_end)
+        today = date.today()
+        if data.report_type == ReportType.DAILY:
+            period_start, period_end = today, today
+        elif data.report_type == ReportType.WEEKLY:
+            period_start, period_end = today - timedelta(days=7), today
+        elif data.report_type == ReportType.MONTHLY:
+            period_start, period_end = today - timedelta(days=30), today
+        elif data.report_type == ReportType.CUSTOM:
+            if data.period_start is None or data.period_end is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="period_start and period_end required for CUSTOM")
+            period_start, period_end = data.period_start, data.period_end
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid report type")
+
 
         orders = self.repository.get_orders_in_period(db, vendor_id, period_start, period_end)
         total_orders = len(orders)
@@ -143,16 +156,3 @@ class AnalyticsService:
         snapshots = self.repository.get_snapshots_by_vendor(db, vendor_id)
         return snapshots
 
-    def _resolve_period(self, report_type: ReportType, period_start: date | None, period_end: date | None) -> tuple[date, date]:
-        today = date.today()
-        if report_type == ReportType.DAILY:
-            return today, today
-        elif report_type == ReportType.WEEKLY:
-            return today - timedelta(days=7), today
-        elif report_type == ReportType.MONTHLY:
-            return today - timedelta(days=30), today
-        elif report_type == ReportType.CUSTOM:
-            if period_start is None or period_end is None:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="period_start and period_end required for CUSTOM")
-            return period_start, period_end
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid report type")

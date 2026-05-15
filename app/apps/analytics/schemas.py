@@ -12,6 +12,8 @@ class AnalyticsRequest(BaseModel):
 
 
 class TopItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     service_item_id: int
     item_name: str
     order_count: int
@@ -19,18 +21,22 @@ class TopItemResponse(BaseModel):
 
 
 class HourlyBreakdownResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     hour: int
     order_count: int
     revenue: float
 
 
 class StatusBreakdownResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     status: str
     count: int
     percentage: float
 
 
 class DailyRevenueResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     date: date
     total_orders: int
     total_revenue: float

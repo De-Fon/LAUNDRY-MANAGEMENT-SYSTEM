@@ -3,10 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.apps.pricing.repository import PricingRepository
 from app.apps.pricing.schemas import PriceCalculationResponse, WashTypeCreate, WashTypeResponse
+from app.core.pricing import calculate_final_price
 
-
-def calculate_final_price(base_price: float, multiplier: float) -> float:
-    return round(base_price * multiplier, 2)
 
 
 class PricingService:
@@ -24,17 +22,15 @@ class PricingService:
         return WashTypeResponse.model_validate(wash_type)
 
     def calculate_price(self, base_price: float, multiplier: float) -> PriceCalculationResponse:
-        self._validate_positive(base_price, "Base price")
-        self._validate_positive(multiplier, "Price multiplier")
+        if base_price <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Base price must be greater than 0")
+        if multiplier <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Price multiplier must be greater than 0")
+            
         return PriceCalculationResponse(
             base_price=base_price,
             multiplier=multiplier,
             final_price=calculate_final_price(base_price, multiplier),
         )
 
-    def _validate_positive(self, value: float, field_name: str) -> None:
-        if value <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{field_name} must be greater than 0",
-            )
+

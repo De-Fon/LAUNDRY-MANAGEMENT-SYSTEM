@@ -16,11 +16,16 @@ class UserService:
         return [UserResponse.model_validate(user) for user in users]
 
     def fetch_user(self, db: Session, user_id: int) -> UserResponse:
-        user = self._get_active_user(db, user_id)
+        user = self.repository.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         return UserResponse.model_validate(user)
 
     def register_user(self, db: Session, data: UserCreate) -> UserResponse:
-        self._ensure_unique_identity(db, data)
+        existing_user = self.repository.find_by_identity(db, str(data.email), data.phone, data.student_id)
+        if existing_user is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User identity already exists")
+            
         user = self.repository.create_user(
             db,
             name=data.name,
@@ -33,28 +38,10 @@ class UserService:
         return UserResponse.model_validate(user)
 
     def update_user(self, db: Session, user_id: int, data: UserUpdate) -> UserResponse:
-        user = self._get_active_user(db, user_id)
-        self._ensure_update_identity_is_available(db, user, data)
-        updated_user = self.repository.update_user(db, user, data)
-        return UserResponse.model_validate(updated_user)
-
-    def deactivate_user(self, db: Session, user_id: int) -> UserResponse:
-        user = self._get_active_user(db, user_id)
-        deactivated_user = self.repository.deactivate_user(db, user)
-        return UserResponse.model_validate(deactivated_user)
-
-    def _get_active_user(self, db: Session, user_id: int) -> User:
         user = self.repository.get_by_id(db, user_id)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        return user
-
-    def _ensure_unique_identity(self, db: Session, data: UserCreate) -> None:
-        existing_user = self.repository.find_by_identity(db, str(data.email), data.phone, data.student_id)
-        if existing_user is not None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User identity already exists")
-
-    def _ensure_update_identity_is_available(self, db: Session, user: User, data: UserUpdate) -> None:
+            
         if data.email is not None:
             matching_user = self.repository.get_by_email(db, str(data.email))
             if matching_user is not None and matching_user.id != user.id:
@@ -69,3 +56,14 @@ class UserService:
             matching_user = self.repository.get_by_student_id(db, data.student_id)
             if matching_user is not None and matching_user.id != user.id:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Student ID already exists")
+        updated_user = self.repository.update_user(db, user, data)
+        return UserResponse.model_validate(updated_user)
+
+    def deactivate_user(self, db: Session, user_id: int) -> UserResponse:
+        user = self.repository.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            
+        deactivated_user = self.repository.deactivate_user(db, user)
+        return UserResponse.model_validate(deactivated_user)
+

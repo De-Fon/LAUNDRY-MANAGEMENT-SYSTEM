@@ -18,6 +18,15 @@ class OrderStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 
+VALID_TRANSITIONS = {
+    OrderStatus.QUEUED: OrderStatus.WASHING,
+    OrderStatus.WASHING: OrderStatus.DRYING,
+    OrderStatus.DRYING: OrderStatus.READY,
+    OrderStatus.READY: OrderStatus.WAITING_TO_PICK,
+    OrderStatus.WAITING_TO_PICK: OrderStatus.PICKED_UP,
+}
+
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -43,6 +52,8 @@ class Order(Base):
         nullable=False,
     )
 
+    student: Mapped["User"] = relationship(foreign_keys=[student_id])
+    vendor: Mapped["User"] = relationship(foreign_keys=[vendor_id])
     service_item: Mapped[ServiceItem] = relationship()
     payments: Mapped[list["Payment"]] = relationship(back_populates="order")
     status_history: Mapped[list["OrderStatusLog"]] = relationship(

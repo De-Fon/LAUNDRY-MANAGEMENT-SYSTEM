@@ -59,7 +59,15 @@ class BookingService:
         return BookingResponse.model_validate(booking)
 
     def fetch_booking(self, db: Session, current_user: User, booking_id: int) -> BookingResponse:
-        booking = self._get_visible_booking(db, current_user, booking_id)
+        booking = self.repository.get_by_id(db, booking_id)
+        if booking is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+
+        can_view = current_user.role == RoleEnum.admin or booking.customer_id == current_user.id
+        can_view = can_view or (booking.vendor_id is not None and booking.vendor_id == current_user.id)
+        if not can_view:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Booking is not available")
+            
         return BookingResponse.model_validate(booking)
 
     def fetch_my_bookings(self, db: Session, current_user: User) -> list[BookingResponse]:
@@ -88,13 +96,6 @@ class BookingService:
         return BookingResponse.model_validate(updated_booking)
 
     def cancel_booking(self, db: Session, current_user: User, booking_id: int) -> BookingResponse:
-        booking = self._get_visible_booking(db, current_user, booking_id)
-        if booking.status in {BookingStatus.completed, BookingStatus.cancelled}:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking cannot be cancelled")
-        updated_booking = self.repository.update_status(db, booking, BookingStatus.cancelled)
-        return BookingResponse.model_validate(updated_booking)
-
-    def _get_visible_booking(self, db: Session, current_user: User, booking_id: int) -> Booking:
         booking = self.repository.get_by_id(db, booking_id)
         if booking is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
@@ -103,4 +104,10 @@ class BookingService:
         can_view = can_view or (booking.vendor_id is not None and booking.vendor_id == current_user.id)
         if not can_view:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Booking is not available")
-        return booking
+
+        if booking.status in {BookingStatus.completed, BookingStatus.cancelled}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking cannot be cancelled")
+        updated_booking = self.repository.update_status(db, booking, BookingStatus.cancelled)
+        return BookingResponse.model_validate(updated_booking)
+
+

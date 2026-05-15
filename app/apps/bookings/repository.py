@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from app.apps.bookings.models import Booking, BookingItem, BookingStatus
 from app.apps.catalog.models import ServiceItem
@@ -8,8 +8,15 @@ from app.apps.pricing.models import WashType
 
 class BookingRepository:
     def get_by_id(self, db: Session, booking_id: int) -> Booking | None:
-        statement = select(Booking).options(selectinload(Booking.items)).where(Booking.id == booking_id)
-        return db.scalar(statement)
+        statement = (
+            select(Booking)
+            .options(
+                joinedload(Booking.items).joinedload(BookingItem.service_item),
+                joinedload(Booking.items).joinedload(BookingItem.wash_type),
+            )
+            .where(Booking.id == booking_id)
+        )
+        return db.scalars(statement).unique().first()
 
     def get_service_item(self, db: Session, service_item_id: int) -> ServiceItem | None:
         statement = select(ServiceItem).where(ServiceItem.id == service_item_id, ServiceItem.is_active.is_(True))
@@ -22,20 +29,26 @@ class BookingRepository:
     def list_for_customer(self, db: Session, customer_id: int) -> list[Booking]:
         statement = (
             select(Booking)
-            .options(selectinload(Booking.items))
+            .options(
+                joinedload(Booking.items).joinedload(BookingItem.service_item),
+                joinedload(Booking.items).joinedload(BookingItem.wash_type),
+            )
             .where(Booking.customer_id == customer_id)
             .order_by(Booking.created_at.desc())
         )
-        return list(db.scalars(statement).all())
+        return list(db.scalars(statement).unique().all())
 
     def list_for_vendor(self, db: Session, vendor_id: int) -> list[Booking]:
         statement = (
             select(Booking)
-            .options(selectinload(Booking.items))
+            .options(
+                joinedload(Booking.items).joinedload(BookingItem.service_item),
+                joinedload(Booking.items).joinedload(BookingItem.wash_type),
+            )
             .where(Booking.vendor_id == vendor_id)
             .order_by(Booking.created_at.desc())
         )
-        return list(db.scalars(statement).all())
+        return list(db.scalars(statement).unique().all())
 
     def create_booking(
         self,

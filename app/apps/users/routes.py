@@ -3,26 +3,25 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.apps.users.models import User
 from app.apps.users.providers import provide_user_service
 from app.apps.users.schemas import UserCreate, UserResponse, UserUpdate
 from app.apps.users.service import UserService
 from app.core.database import get_db
-from app.shared.auth import get_current_user, require_admin
+from app.shared.auth import AuthenticatedUser, get_current_user, require_admin
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: Annotated[User, Depends(get_current_user)]) -> UserResponse:
+def get_me(current_user: Annotated[AuthenticatedUser, Depends(get_current_user)]) -> UserResponse:
     return UserResponse.model_validate(current_user)
 
 
 @router.put("/me", response_model=UserResponse)
 def update_me(
     data: UserUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[UserService, Depends(provide_user_service)],
 ) -> UserResponse:

@@ -54,6 +54,8 @@ class CreditTabDetailResponse(CreditTabResponse):
 
 
 class DebtReminderSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     total_tabs: int
     total_outstanding: float
     currency: str = "KES"

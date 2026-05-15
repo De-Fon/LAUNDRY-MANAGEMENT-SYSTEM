@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.apps.notifications.models import Notification, NotificationChannel, NotificationStatus
 from app.apps.users.models import User
-
+from app.core.logger import logger
 
 class NotificationRepository:
     def get_user(self, db: Session, user_id: int) -> User | None:
@@ -51,4 +51,19 @@ class NotificationRepository:
         notification.read_at = datetime.now(UTC)
         db.commit()
         db.refresh(notification)
+        return notification
+
+    def mark_failed(
+        self,
+        db: Session,
+        notification: Notification,
+        error_detail: str | None = None,
+    ) -> Notification:
+        notification.status = NotificationStatus.failed
+        db.commit()
+        db.refresh(notification)
+        logger.info(
+            f"Notification marked failed | id={notification.id} | "
+            f"channel={notification.channel}"
+        )
         return notification

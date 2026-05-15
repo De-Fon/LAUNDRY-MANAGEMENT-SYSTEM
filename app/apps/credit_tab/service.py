@@ -41,11 +41,18 @@ class CreditService:
         return CreditTabResponse.model_validate(tab)
 
     def fetch_tab(self, db: Session, tab_id: int, student_id: int) -> CreditTabDetailResponse:
-        tab = self._get_tab_or_404(db, tab_id)
+        tab = self.repository.get_tab_by_id(db, tab_id)
+        if tab is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Credit tab not found")
+            
         if tab.student_id != student_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only view your own tabs")
 
-        return self._build_tab_detail(tab, self.repository.get_payments_by_tab(db, tab_id))
+        payments = self.repository.get_payments_by_tab(db, tab_id)
+        return CreditTabDetailResponse(
+            **CreditTabResponse.model_validate(tab).model_dump(),
+            payments=[CreditPaymentResponse.model_validate(payment) for payment in payments],
+        )
 
     def fetch_student_tabs(self, db: Session, student_id: int) -> list[CreditTabResponse]:
         return [CreditTabResponse.model_validate(tab) for tab in self.repository.get_tabs_by_student(db, student_id)]
@@ -62,12 +69,26 @@ class CreditService:
             self.idempotency_service.log_duplicate(data.idempotency_key, "CREDIT_PAYMENT", vendor_id)
             return CreditPaymentResponse.model_validate(duplicate)
 
-        tab = self._get_tab_for_payment(db, data.credit_tab_id, vendor_id)
-        self._validate_payment_amount(tab, data.amount_paid)
+        tab = self.repository.get_tab_by_id_for_update(db, data.credit_tab_id)
+        if tab is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Credit tab not found")
+        if tab.vendor_id != vendor_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only manage your own tabs")
+        if tab.status == CreditStatus.PAID or tab.outstanding_balance == 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Credit tab is already paid")
+            
+        if data.amount_paid > tab.outstanding_balance:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment exceeds outstanding balance")
 
         new_amount_paid = round(tab.amount_paid + data.amount_paid, 2)
         new_balance = round(tab.total_amount - new_amount_paid, 2)
-        new_status = self._calculate_status(tab.total_amount, new_balance)
+        
+        if new_balance == 0:
+            new_status = CreditStatus.PAID
+        elif 0 < new_balance < tab.total_amount:
+            new_status = CreditStatus.PARTIAL
+        else:
+            new_status = CreditStatus.UNPAID
 
         payment = self.repository.apply_payment(
             db,
@@ -94,36 +115,3 @@ class CreditService:
         total_outstanding = round(sum(tab.outstanding_balance for tab in tabs), 2)
         return DebtReminderSummary(total_tabs=len(tabs), total_outstanding=total_outstanding)
 
-    def _get_tab_or_404(self, db: Session, tab_id: int) -> CreditTab:
-        tab = self.repository.get_tab_by_id(db, tab_id)
-        if tab is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Credit tab not found")
-        return tab
-
-    def _get_tab_for_payment(self, db: Session, tab_id: int, vendor_id: int) -> CreditTab:
-        tab = self.repository.get_tab_by_id_for_update(db, tab_id)
-        if tab is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Credit tab not found")
-        if tab.vendor_id != vendor_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only manage your own tabs")
-        if tab.status == CreditStatus.PAID or tab.outstanding_balance == 0:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Credit tab is already paid")
-        return tab
-
-    def _validate_payment_amount(self, tab: CreditTab, amount: float) -> None:
-        if amount <= tab.outstanding_balance:
-            return
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment exceeds outstanding balance")
-
-    def _calculate_status(self, total_amount: float, outstanding_balance: float) -> CreditStatus:
-        if outstanding_balance == 0:
-            return CreditStatus.PAID
-        if 0 < outstanding_balance < total_amount:
-            return CreditStatus.PARTIAL
-        return CreditStatus.UNPAID
-
-    def _build_tab_detail(self, tab: CreditTab, payments: list[CreditPayment]) -> CreditTabDetailResponse:
-        return CreditTabDetailResponse(
-            **CreditTabResponse.model_validate(tab).model_dump(),
-            payments=[CreditPaymentResponse.model_validate(payment) for payment in payments],
-        )

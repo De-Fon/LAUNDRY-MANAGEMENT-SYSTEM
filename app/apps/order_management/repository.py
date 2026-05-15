@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from app.apps.order_management.models import Order, OrderStatus, OrderStatusLog
 
@@ -16,39 +16,63 @@ class OrderRepository:
             select(Order)
             .options(
                 joinedload(Order.service_item),
-                selectinload(Order.status_history),
+                joinedload(Order.status_history),
+                joinedload(Order.payments),
             )
             .where(Order.id == order_id)
         )
-        return db.scalar(statement)
+        return db.scalars(statement).unique().first()
 
     def get_order_by_id_for_update(self, db: Session, order_id: int) -> Order | None:
         statement = (
             select(Order)
-            .options(joinedload(Order.service_item))
+            .options(
+                joinedload(Order.service_item),
+                joinedload(Order.status_history),
+                joinedload(Order.payments),
+            )
             .where(Order.id == order_id)
             .with_for_update()
         )
-        return db.scalar(statement)
+        return db.scalars(statement).unique().first()
 
     def get_order_by_code(self, db: Session, order_code: str) -> Order | None:
         statement = (
             select(Order)
             .options(
                 joinedload(Order.service_item),
-                selectinload(Order.status_history),
+                joinedload(Order.status_history),
+                joinedload(Order.payments),
             )
             .where(Order.order_code == order_code)
         )
-        return db.scalar(statement)
+        return db.scalars(statement).unique().first()
 
     def get_orders_by_student(self, db: Session, student_id: int) -> list[Order]:
-        statement = select(Order).where(Order.student_id == student_id).order_by(Order.created_at.desc())
-        return list(db.scalars(statement).all())
+        statement = (
+            select(Order)
+            .options(
+                joinedload(Order.service_item),
+                joinedload(Order.status_history),
+                joinedload(Order.payments),
+            )
+            .where(Order.student_id == student_id)
+            .order_by(Order.created_at.desc())
+        )
+        return list(db.scalars(statement).unique().all())
 
     def get_orders_by_vendor(self, db: Session, vendor_id: int) -> list[Order]:
-        statement = select(Order).where(Order.vendor_id == vendor_id).order_by(Order.created_at.desc())
-        return list(db.scalars(statement).all())
+        statement = (
+            select(Order)
+            .options(
+                joinedload(Order.service_item),
+                joinedload(Order.status_history),
+                joinedload(Order.payments),
+            )
+            .where(Order.vendor_id == vendor_id)
+            .order_by(Order.created_at.desc())
+        )
+        return list(db.scalars(statement).unique().all())
 
     def update_order_status(self, db: Session, order_id: int, new_status: OrderStatus) -> Order | None:
         order = self.get_order_by_id(db, order_id)

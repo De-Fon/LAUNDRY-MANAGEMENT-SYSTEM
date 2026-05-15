@@ -19,6 +19,8 @@ class WashTypeResponse(BaseModel):
 
 
 class PriceCalculationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     base_price: float
     multiplier: float
     final_price: float

@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, Request
 from sqlalchemy.orm import Session
+from app.core.limiter import limiter
 
 from app.apps.ledger.providers import provide_ledger_service
 from app.apps.ledger.schemas import (
@@ -44,7 +45,9 @@ def get_my_ledger_summary(
 
 
 @router.post("/accounts", response_model=LedgerAccountResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 def create_ledger_account(
+    request: Request,
     data: LedgerAccountCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
     db: Annotated[Session, Depends(get_db)],
@@ -54,7 +57,9 @@ def create_ledger_account(
 
 
 @router.post("/transactions", response_model=LedgerTransactionResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 def create_ledger_transaction(
+    request: Request,
     data: LedgerTransactionCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
     db: Annotated[Session, Depends(get_db)],
@@ -64,7 +69,9 @@ def create_ledger_transaction(
 
 
 @router.post("/transactions/reverse", response_model=LedgerTransactionResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 def reverse_ledger_transaction(
+    request: Request,
     data: LedgerReverseCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
     db: Annotated[Session, Depends(get_db)],
@@ -74,7 +81,9 @@ def reverse_ledger_transaction(
 
 
 @router.post("/adjust", response_model=LedgerTransactionResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 def apply_ledger_adjustment(
+    request: Request,
     data: LedgerAdjustmentCreate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
     db: Annotated[Session, Depends(get_db)],

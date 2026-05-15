@@ -65,6 +65,8 @@ class OrderSummaryResponse(BaseModel):
 
 
 class DashboardSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     vendor_id: int
     business_name: str
     is_open: bool
@@ -91,4 +93,6 @@ class BulkStatusUpdate(BaseModel):
 
 
 class BulkStatusUpdateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     updated_count: int

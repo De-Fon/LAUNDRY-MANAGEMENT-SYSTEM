@@ -80,20 +80,28 @@ class VendorDashboardRepository:
         start, end = self._day_bounds(target_date)
         statement = (
             select(Order)
-            .options(joinedload(Order.service_item))
+            .options(
+                joinedload(Order.service_item),
+                joinedload(Order.status_history),
+                joinedload(Order.payments),
+            )
             .where(Order.vendor_id == vendor_id, Order.created_at >= start, Order.created_at < end)
             .order_by(Order.created_at.desc())
         )
-        return list(db.scalars(statement).all())
+        return list(db.scalars(statement).unique().all())
 
     def get_orders_by_status(self, db: Session, vendor_id: int, status: OrderStatus) -> list[Order]:
         statement = (
             select(Order)
-            .options(joinedload(Order.service_item))
+            .options(
+                joinedload(Order.service_item),
+                joinedload(Order.status_history),
+                joinedload(Order.payments),
+            )
             .where(Order.vendor_id == vendor_id, Order.status == status)
             .order_by(Order.created_at.desc())
         )
-        return list(db.scalars(statement).all())
+        return list(db.scalars(statement).unique().all())
 
     def count_orders_by_status(self, db: Session, vendor_id: int, target_date: date) -> dict[OrderStatus, int]:
         start, end = self._day_bounds(target_date)
