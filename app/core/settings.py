@@ -23,6 +23,19 @@ class Settings(BaseSettings):
     at_api_key: str | None = None
     at_username: str | None = "sandbox"
 
+    daraja_environment: str = "sandbox"
+    daraja_consumer_key: str | None = None
+    daraja_consumer_secret: str | None = None
+    daraja_business_short_code: str = "174379"
+    daraja_passkey: str | None = None
+    daraja_callback_url: str | None = None
+    daraja_account_reference_prefix: str = "HELB"
+    daraja_transaction_desc: str = "Loan repayment"
+    daraja_request_timeout_seconds: int = 30
+    daraja_stk_timeout_minutes: int = 3
+    daraja_reconciliation_interval_minutes: int = 2
+    daraja_max_query_retries: int = 5
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @field_validator("debug", mode="before")
