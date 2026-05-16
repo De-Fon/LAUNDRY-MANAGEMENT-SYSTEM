@@ -17,6 +17,7 @@ from app.apps.waitlist.routes import router as waitlist_router
 
 
 def register_routes(app: FastAPI) -> None:
+    app.include_router(auth_router)
     app.include_router(catalog_router)
     app.include_router(pricing_router)
     app.include_router(bookings_router)
@@ -24,7 +25,6 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(credit_tab_router)
     app.include_router(vendor_dashboard_router)
     app.include_router(ledger_router)
-    app.include_router(auth_router)
     app.include_router(payments_router)
     app.include_router(notifications_router)
     app.include_router(users_router)

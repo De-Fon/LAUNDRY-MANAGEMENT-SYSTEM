@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.apps.order_management.models import Order, OrderStatus, OrderStatusLog, VALID_TRANSITIONS
+from app.apps.order_management.models import OrderStatus, OrderStatusLog, VALID_TRANSITIONS
 from app.apps.order_management.repository import OrderRepository
 from app.apps.vendor_dashboard.models import VendorCapacity, VendorProfile
 from app.apps.vendor_dashboard.repository import VendorDashboardRepository
@@ -16,7 +16,6 @@ from app.apps.vendor_dashboard.schemas import (
     VendorProfileResponse,
     VendorProfileUpdate,
 )
-
 
 class VendorDashboardService:
     def __init__(
@@ -32,7 +31,7 @@ class VendorDashboardService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Vendor profile already exists")
 
         profile = self.repository.create_vendor_profile(db, VendorProfile(vendor_id=vendor_id, **data.model_dump()))
-        
+
         capacity = VendorCapacity(
             vendor_id=vendor_id,
             date=date.today(),
@@ -70,7 +69,7 @@ class VendorDashboardService:
         profile = self.repository.get_vendor_profile(db, vendor_id)
         if profile is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor profile not found")
-            
+
         orders = self.repository.get_orders_today(db, vendor_id, today)
         counts = self.repository.count_orders_by_status(db, vendor_id, today)
         revenue = round(self.repository.get_revenue_today(db, vendor_id, today), 2)
@@ -132,4 +131,3 @@ class VendorDashboardService:
         profile = self.repository.get_vendor_profile(db, vendor_id)
         capacity = self.repository.get_vendor_capacity(db, vendor_id, date.today())
         return bool(profile and profile.is_open and capacity and capacity.available_slots > 0)
-

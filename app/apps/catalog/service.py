@@ -1,10 +1,7 @@
-import json
-
 from fastapi import HTTPException, status
 from redis import Redis
 from sqlalchemy.orm import Session
 
-from app.apps.catalog.models import ServiceItem
 from app.apps.catalog.repository import CatalogRepository
 from app.apps.catalog.schemas import (
     CategoryCatalogResponse,
@@ -21,7 +18,6 @@ CATALOG_FULL_KEY = "catalog:full"
 CATALOG_ITEMS_KEY = "catalog:items"
 CATALOG_CATEGORIES_KEY = "catalog:categories"
 CATALOG_TTL = 3600  # 1 hour
-
 
 class CatalogService:
     def __init__(self, repository: CatalogRepository) -> None:
@@ -76,7 +72,7 @@ class CatalogService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Base price must be greater than 0")
         if self.repository.get_category_by_id(db, data.category_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-            
+
         item_check = self.repository.get_item_by_name_in_category(db, data.category_id, data.name)
         if item_check is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Item name already exists in this category")
@@ -101,7 +97,7 @@ class CatalogService:
 
         if data.category_id is not None and self.repository.get_category_by_id(db, data.category_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-            
+
         item_check = self.repository.get_item_by_name_in_category(db, category_id, name)
         if item_check is not None and item_check.id != item_id:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Item name already exists in this category")
@@ -117,7 +113,7 @@ class CatalogService:
         item = self.repository.get_item_by_id(db, item_id)
         if item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")
-            
+
         deleted_item = self.repository.soft_delete_item(db, item_id)
         if deleted_item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found")

@@ -1,8 +1,15 @@
+from __future__ import annotations
+
 import enum
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from app.apps.users.models import User
+    from app.apps.payments.models import Payment
 
 from app.apps.catalog.models import ServiceItem
 from app.core.database import Base

@@ -1,6 +1,6 @@
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from app.apps.analytics.models import ReportType
 
@@ -79,3 +79,4 @@ class FullAnalyticsReportResponse(BaseModel):
     hourly_breakdown: list[HourlyBreakdownResponse]
     status_breakdown: list[StatusBreakdownResponse]
     daily_revenue: list[DailyRevenueResponse]
+

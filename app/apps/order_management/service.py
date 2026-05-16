@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.apps.catalog.repository import CatalogRepository
-from app.apps.order_management.models import Order, OrderStatus, OrderStatusLog, VALID_TRANSITIONS
+from app.apps.order_management.models import Order, OrderStatusLog, VALID_TRANSITIONS
 from app.apps.order_management.repository import OrderRepository
 from app.apps.order_management.schemas import (
     OrderCreate,
@@ -16,7 +16,6 @@ from app.apps.order_management.schemas import (
 from app.apps.pricing.repository import PricingRepository
 from app.core.logger import logger
 from app.core.pricing import calculate_final_price
-
 
 class OrderService:
     def __init__(
@@ -40,7 +39,7 @@ class OrderService:
 
         item_price = calculate_final_price(service_item.base_price, wash_type.price_multiplier)
         total_price = round(item_price * data.quantity, 2)
-        
+
         order = self.order_repository.create_order(
             db,
             Order(
@@ -86,10 +85,10 @@ class OrderService:
         order = self.order_repository.get_order_by_id_for_update(db, order_id)
         if order is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-            
+
         if order.vendor_id != changed_by:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update your own orders")
-            
+
         if VALID_TRANSITIONS.get(order.status) != status_update.status:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
 

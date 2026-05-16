@@ -13,7 +13,6 @@ from app.apps.credit_tab.schemas import (
 )
 from app.apps.idempotency.service import IdempotencyService
 
-
 class CreditService:
     def __init__(self, repository: CreditRepository, idempotency_service: IdempotencyService) -> None:
         self.repository = repository
@@ -44,7 +43,7 @@ class CreditService:
         tab = self.repository.get_tab_by_id(db, tab_id)
         if tab is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Credit tab not found")
-            
+
         if tab.student_id != student_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only view your own tabs")
 
@@ -76,13 +75,13 @@ class CreditService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only manage your own tabs")
         if tab.status == CreditStatus.PAID or tab.outstanding_balance == 0:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Credit tab is already paid")
-            
+
         if data.amount_paid > tab.outstanding_balance:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment exceeds outstanding balance")
 
         new_amount_paid = round(tab.amount_paid + data.amount_paid, 2)
         new_balance = round(tab.total_amount - new_amount_paid, 2)
-        
+
         if new_balance == 0:
             new_status = CreditStatus.PAID
         elif 0 < new_balance < tab.total_amount:
@@ -114,4 +113,3 @@ class CreditService:
         ]
         total_outstanding = round(sum(tab.outstanding_balance for tab in tabs), 2)
         return DebtReminderSummary(total_tabs=len(tabs), total_outstanding=total_outstanding)
-

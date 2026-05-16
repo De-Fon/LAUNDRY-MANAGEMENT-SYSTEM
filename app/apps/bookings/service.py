@@ -3,11 +3,10 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.apps.bookings.models import Booking, BookingItem, BookingStatus
+from app.apps.bookings.models import BookingItem, BookingStatus
 from app.apps.bookings.repository import BookingRepository
 from app.apps.bookings.schemas import BookingCreate, BookingResponse, BookingStatusUpdate
 from app.apps.users.models import RoleEnum, User
-
 
 class BookingService:
     def __init__(self, repository: BookingRepository) -> None:
@@ -67,7 +66,7 @@ class BookingService:
         can_view = can_view or (booking.vendor_id is not None and booking.vendor_id == current_user.id)
         if not can_view:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Booking is not available")
-            
+
         return BookingResponse.model_validate(booking)
 
     def fetch_my_bookings(self, db: Session, current_user: User) -> list[BookingResponse]:

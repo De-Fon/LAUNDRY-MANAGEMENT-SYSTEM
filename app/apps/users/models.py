@@ -5,6 +5,13 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Enum, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.apps.payments.models import Payment
+    from app.apps.bookings.models import Booking
+    from app.apps.notifications.models import Notification
+    from app.apps.waitlist.models import WaitlistEntry
 
 from app.core.database import Base
 

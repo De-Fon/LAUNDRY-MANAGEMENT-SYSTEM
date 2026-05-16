@@ -6,7 +6,8 @@ from redis import Redis
 from sqlalchemy.orm import Session
 from app.core.limiter import limiter
 
-from app.apps.catalog.providers import provide_catalog_service, provide_redis, require_vendor
+from app.apps.catalog.providers import provide_catalog_service, provide_redis
+from app.shared.auth import require_vendor
 from app.apps.catalog.schemas import (
     CategoryCreate,
     CategoryResponse,

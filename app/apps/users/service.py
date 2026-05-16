@@ -1,11 +1,9 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.apps.users.models import User
 from app.apps.users.repository import UserRepository
 from app.apps.users.schemas import UserCreate, UserResponse, UserUpdate
 from app.core.security import hash_password
-
 
 class UserService:
     def __init__(self, repository: UserRepository) -> None:
@@ -25,7 +23,7 @@ class UserService:
         existing_user = self.repository.find_by_identity(db, str(data.email), data.phone, data.student_id)
         if existing_user is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User identity already exists")
-            
+
         user = self.repository.create_user(
             db,
             name=data.name,
@@ -41,7 +39,7 @@ class UserService:
         user = self.repository.get_by_id(db, user_id)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-            
+
         if data.email is not None:
             matching_user = self.repository.get_by_email(db, str(data.email))
             if matching_user is not None and matching_user.id != user.id:
@@ -63,7 +61,6 @@ class UserService:
         user = self.repository.get_by_id(db, user_id)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-            
+
         deactivated_user = self.repository.deactivate_user(db, user)
         return UserResponse.model_validate(deactivated_user)
-

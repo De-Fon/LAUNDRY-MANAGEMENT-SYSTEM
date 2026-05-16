@@ -106,14 +106,13 @@ class NotificationService:
         from app.core.email_templates import order_ready_template
 
         subject = "Your laundry is ready for pickup!"
-        html_body = order_ready_template(student_name, order_code)
 
         notification = self.repository.create_notification(
             db,
             user_id=student_id,
             channel=NotificationChannel.email,
             subject=subject,
-            message=f"Hi {student_name}, your order {order_code} is ready.",
+            message=order_ready_template(student_name, order_code),
         )
 
         background_tasks.add_task(
@@ -153,16 +152,15 @@ class NotificationService:
         from app.core.email_templates import payment_receipt_template
 
         subject = f"Payment Receipt — {order_code}"
-        html_body = payment_receipt_template(
-            student_name, order_code, amount_paid, outstanding_balance
-        )
 
         notification = self.repository.create_notification(
             db,
             user_id=student_id,
             channel=NotificationChannel.email,
             subject=subject,
-            message=f"Payment of KES {amount_paid} received for {order_code}.",
+            message=payment_receipt_template(
+                student_name, order_code, amount_paid, outstanding_balance
+            ),
         )
 
         background_tasks.add_task(

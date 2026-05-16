@@ -1,5 +1,4 @@
 from datetime import date, timedelta
-from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
@@ -140,3 +139,4 @@ class AnalyticsRepository:
             AnalyticsSnapshot.period_end == period_end,
         )
         return db.scalar(statement)
+

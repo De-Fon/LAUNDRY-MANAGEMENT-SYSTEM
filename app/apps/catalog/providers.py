@@ -6,7 +6,6 @@ from redis import Redis
 from app.apps.catalog.repository import CatalogRepository
 from app.apps.catalog.service import CatalogService
 from app.core.redis import get_redis
-from app.shared.auth import require_vendor
 
 
 def provide_catalog_repository() -> CatalogRepository:

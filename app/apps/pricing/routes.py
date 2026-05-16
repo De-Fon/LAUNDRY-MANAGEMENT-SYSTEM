@@ -3,7 +3,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.apps.pricing.providers import provide_pricing_service, require_vendor
+from app.apps.pricing.providers import provide_pricing_service
+from app.shared.auth import require_vendor
 from app.apps.pricing.schemas import PriceCalculationResponse, WashTypeCreate, WashTypeResponse
 from app.apps.pricing.service import PricingService
 from app.core.database import get_db

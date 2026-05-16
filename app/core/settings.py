@@ -3,7 +3,6 @@ from functools import lru_cache
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -17,7 +16,7 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     resend_from_email: str = "notifications@campuslaundry.co.ke"
     resend_from_name: str = "Campus Laundry"
-    
+
     environment: str = "development"
     algorithm: str = "HS256"
     at_api_key: str | None = None
@@ -44,7 +43,6 @@ class Settings(BaseSettings):
         if isinstance(value, str) and value.lower() in {"release", "prod", "production"}:
             return False
         return value
-
 
 @lru_cache
 def get_settings() -> Settings:

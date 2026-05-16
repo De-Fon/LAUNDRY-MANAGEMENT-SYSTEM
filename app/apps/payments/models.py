@@ -6,6 +6,11 @@ from typing import Any
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, Index, Integer, JSON, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.apps.order_management.models import Order
+    from app.apps.users.models import User
 
 from app.core.database import Base
 

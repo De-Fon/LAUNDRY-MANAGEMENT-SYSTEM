@@ -5,8 +5,6 @@ from app.apps.pricing.repository import PricingRepository
 from app.apps.pricing.schemas import PriceCalculationResponse, WashTypeCreate, WashTypeResponse
 from app.core.pricing import calculate_final_price
 
-
-
 class PricingService:
     def __init__(self, repository: PricingRepository) -> None:
         self.repository = repository
@@ -26,11 +24,9 @@ class PricingService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Base price must be greater than 0")
         if multiplier <= 0:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Price multiplier must be greater than 0")
-            
+
         return PriceCalculationResponse(
             base_price=base_price,
             multiplier=multiplier,
             final_price=calculate_final_price(base_price, multiplier),
         )
-
-
