@@ -20,7 +20,15 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        op.execute("ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'CANCELLED'")
+        order_status_exists = bind.execute(
+            sa.text("SELECT 1 FROM pg_type WHERE typname = 'order_status'")
+        ).scalar()
+        if order_status_exists is None:
+            op.execute(
+                "CREATE TYPE order_status AS ENUM ('QUEUED', 'WASHING', 'DRYING', 'READY', 'WAITING_TO_PICK', 'PICKED_UP', 'CANCELLED')"
+            )
+        else:
+            op.execute("ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'CANCELLED'")
 
     with op.batch_alter_table("payments") as batch_op:
         batch_op.drop_constraint("uq_payments_provider_reference", type_="unique")

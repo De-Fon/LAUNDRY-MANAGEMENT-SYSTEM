@@ -8,7 +8,6 @@ from app.apps.auth import models as auth_models  # noqa: F401
 from app.apps.bookings import models as bookings_models  # noqa: F401
 from app.apps.catalog import models as catalog_models  # noqa: F401
 from app.apps.credit_tab import models as credit_tab_models  # noqa: F401
-from app.apps.health import models as health_models  # noqa: F401
 from app.apps.idempotency import models as idempotency_models  # noqa: F401
 from app.apps.ledger import models as ledger_models  # noqa: F401
 from app.apps.notifications import models as notifications_models  # noqa: F401
