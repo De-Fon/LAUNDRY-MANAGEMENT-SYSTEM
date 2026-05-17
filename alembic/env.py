@@ -1,14 +1,15 @@
 from logging.config import fileConfig
+import sys
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+# ── Step 1: Import all models first so they register on Base ──
 from app.apps.analytics import models as analytics_models  # noqa: F401
 from app.apps.auth import models as auth_models  # noqa: F401
 from app.apps.bookings import models as bookings_models  # noqa: F401
 from app.apps.catalog import models as catalog_models  # noqa: F401
 from app.apps.credit_tab import models as credit_tab_models  # noqa: F401
-from app.apps.idempotency import models as idempotency_models  # noqa: F401
 from app.apps.ledger import models as ledger_models  # noqa: F401
 from app.apps.notifications import models as notifications_models  # noqa: F401
 from app.apps.order_management import models as order_management_models  # noqa: F401
@@ -17,8 +18,13 @@ from app.apps.pricing import models as pricing_models  # noqa: F401
 from app.apps.users import models as users_models  # noqa: F401
 from app.apps.vendor_dashboard import models as vendor_dashboard_models  # noqa: F401
 from app.apps.waitlist import models as waitlist_models  # noqa: F401
+
+# ── Step 2: Import Base AFTER all models ──
 from app.core.database import Base
 from app.core.settings import get_settings
+
+# ── Step 3: Verify tables are registered ──
+print(f"[env.py] Tables registered: {len(Base.metadata.tables)}", file=sys.stderr)
 
 config = context.config
 
@@ -27,6 +33,7 @@ if config.config_file_name is not None:
 
 settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.database_url)
+
 target_metadata = Base.metadata
 
 
