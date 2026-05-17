@@ -5,11 +5,12 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.apps.idempotency.service import IdempotencyService
+from app.apps.notifications.service import NotificationService
 from app.apps.order_management.models import OrderStatus
 from app.apps.payments.models import (
     Payment,
@@ -70,11 +71,13 @@ class PaymentService:
         idempotency_service: IdempotencyService,
         daraja_client: DarajaClient,
         settings: Settings,
+        notification_service: NotificationService | None = None,
     ) -> None:
         self.repository = repository
         self.idempotency_service = idempotency_service
         self.daraja_client = daraja_client
         self.settings = settings
+        self.notification_service = notification_service
 
     def create_payment(self, db: Session, current_user: User, data: PaymentCreate) -> PaymentResponse:
         duplicate = self.idempotency_service.find_duplicate(db, Payment, data.idempotency_key)
@@ -220,10 +223,17 @@ class PaymentService:
         payments = self.repository.list_for_customer(db, current_user.id)
         return [PaymentResponse.model_validate(payment) for payment in payments]
 
-    def update_payment_status(self, db: Session, payment_id: int, data: PaymentStatusUpdate) -> PaymentResponse:
+    def update_payment_status(
+        self,
+        db: Session,
+        payment_id: int,
+        data: PaymentStatusUpdate,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> PaymentResponse:
         payment = self.repository.get_by_id(db, payment_id)
         if payment is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+        previous_status = payment.status
         self._transition(
             db,
             payment,
@@ -234,17 +244,28 @@ class PaymentService:
         )
         db.commit()
         db.refresh(payment)
+        if previous_status != PaymentStatus.SUCCESS and payment.status == PaymentStatus.SUCCESS:
+            self._queue_transaction_receipt_email(db, payment, background_tasks)
         return PaymentResponse.model_validate(payment)
 
-    def query_stk_status(self, db: Session, current_user: User, checkout_request_id: str) -> STKQueryResponse:
+    def query_stk_status(
+        self,
+        db: Session,
+        current_user: User,
+        checkout_request_id: str,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> STKQueryResponse:
         payment = self.repository.get_by_checkout_request_id(db, checkout_request_id)
         if payment is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
         if payment.student_id != current_user.id and current_user.role not in {RoleEnum.admin, RoleEnum.vendor}:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Payment is not available")
+        previous_status = payment.status
         self._query_and_apply_result(db, payment)
         db.commit()
         db.refresh(payment)
+        if previous_status != PaymentStatus.SUCCESS and payment.status == PaymentStatus.SUCCESS:
+            self._queue_transaction_receipt_email(db, payment, background_tasks)
         return STKQueryResponse(
             payment_id=payment.id,
             status=payment.status,
@@ -253,7 +274,12 @@ class PaymentService:
             provider_result_description=payment.provider_result_description,
         )
 
-    def handle_callback(self, db: Session, payload: dict[str, Any]) -> DarajaCallbackResponse:
+    def handle_callback(
+        self,
+        db: Session,
+        payload: dict[str, Any],
+        background_tasks: BackgroundTasks | None = None,
+    ) -> DarajaCallbackResponse:
         callback_data = self._extract_callback(payload)
         payload_hash = self._payload_hash(payload)
         existing_callback = self.repository.get_callback_by_hash(db, payload_hash)
@@ -281,6 +307,7 @@ class PaymentService:
 
         try:
             status_to_apply = self._status_from_result_code(callback_data["result_code"])
+            previous_status = payment.status
             if payment.status in TERMINAL_STATUSES:
                 self.repository.mark_callback_processed(callback_log)
                 db.commit()
@@ -309,6 +336,8 @@ class PaymentService:
                 )
             self.repository.mark_callback_processed(callback_log)
             db.commit()
+            if previous_status != PaymentStatus.SUCCESS and payment.status == PaymentStatus.SUCCESS:
+                self._queue_transaction_receipt_email(db, payment, background_tasks)
         except Exception as exc:
             db.rollback()
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Callback processing failed") from exc
@@ -414,6 +443,38 @@ class PaymentService:
             return None
         backoff_minutes = self.settings.daraja_reconciliation_interval_minutes * max(1, payment.retry_count + 1)
         return datetime.now(UTC) + timedelta(minutes=backoff_minutes)
+
+    def _queue_transaction_receipt_email(
+        self,
+        db: Session,
+        payment: Payment,
+        background_tasks: BackgroundTasks | None,
+    ) -> None:
+        if self.notification_service is None:
+            return
+
+        try:
+            order = self.repository.get_order(db, payment.order_id)
+            order_number = order.order_code if order is not None else f"ORDER-{payment.order_id}"
+            service_name = "Laundry service"
+            if order is not None and getattr(order, "service_item", None) is not None:
+                service_name = order.service_item.name
+
+            self.notification_service.send_transaction_receipt_email(
+                db,
+                background_tasks,
+                student_id=payment.student_id,
+                order_number=order_number,
+                services=[service_name],
+                total=payment.amount,
+                payment_status=payment.status.value,
+                timestamp=payment.paid_at,
+            )
+        except Exception as exc:
+            db.rollback()
+            from app.core.logger import logger
+
+            logger.error(f"Transaction receipt email queue failed | payment_id={payment.id} | error={exc}")
 
     @staticmethod
     def _status_from_result_code(result_code: int) -> PaymentStatus:

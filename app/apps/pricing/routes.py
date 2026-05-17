@@ -1,10 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.apps.pricing.providers import provide_pricing_service
-from app.shared.auth import require_vendor
+from app.shared.auth import AuthenticatedUser, get_current_user, require_vendor
 from app.apps.pricing.schemas import PriceCalculationResponse, WashTypeCreate, WashTypeResponse
 from app.apps.pricing.service import PricingService
 from app.core.database import get_db
@@ -28,6 +28,16 @@ def calculate_price(
     multiplier: Annotated[float, Query(gt=0)],
 ) -> PriceCalculationResponse:
     return service.calculate_price(base_price, multiplier)
+
+
+@router.post("/rate-card/email", response_model=dict)
+def email_rate_card(
+    background_tasks: BackgroundTasks,
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    service: Annotated[PricingService, Depends(provide_pricing_service)],
+) -> dict:
+    return service.email_rate_card(db, current_user, background_tasks)
 
 
 @router.post("/wash-types", response_model=WashTypeResponse, dependencies=[Depends(require_vendor)], status_code=status.HTTP_201_CREATED)

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from sqlalchemy.orm import Session
 from app.core.limiter import limiter
 
@@ -58,21 +58,23 @@ def get_my_payments(
 @router.get("/status/{checkout_request_id}", response_model=STKQueryResponse)
 def query_payment_status(
     checkout_request_id: str,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[PaymentService, Depends(provide_payment_service)],
 ) -> STKQueryResponse:
-    return service.query_stk_status(db, current_user, checkout_request_id)
+    return service.query_stk_status(db, current_user, checkout_request_id, background_tasks)
 
 
 @router.post("/callback", response_model=DarajaCallbackResponse)
 async def daraja_callback(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[PaymentService, Depends(provide_payment_service)],
 ) -> DarajaCallbackResponse:
     payload = await request.json()
-    return service.handle_callback(db, payload)
+    return service.handle_callback(db, payload, background_tasks)
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)
@@ -89,7 +91,8 @@ def get_payment(
 def update_payment_status(
     payment_id: int,
     data: PaymentStatusUpdate,
+    background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[PaymentService, Depends(provide_payment_service)],
 ) -> PaymentResponse:
-    return service.update_payment_status(db, payment_id, data)
+    return service.update_payment_status(db, payment_id, data, background_tasks)

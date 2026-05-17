@@ -1,10 +1,11 @@
 from uuid import uuid4
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.apps.catalog.repository import CatalogRepository
-from app.apps.order_management.models import Order, OrderStatusLog, VALID_TRANSITIONS
+from app.apps.notifications.service import NotificationService
+from app.apps.order_management.models import Order, OrderStatus, OrderStatusLog, VALID_TRANSITIONS
 from app.apps.order_management.repository import OrderRepository
 from app.apps.order_management.schemas import (
     OrderCreate,
@@ -23,10 +24,12 @@ class OrderService:
         order_repository: OrderRepository,
         catalog_repository: CatalogRepository,
         pricing_repository: PricingRepository,
+        notification_service: NotificationService | None = None,
     ) -> None:
         self.order_repository = order_repository
         self.catalog_repository = catalog_repository
         self.pricing_repository = pricing_repository
+        self.notification_service = notification_service
 
     def place_order(self, db: Session, student_id: int, data: OrderCreate) -> OrderResponse:
         service_item = self.catalog_repository.get_item_by_id(db, data.service_item_id)
@@ -81,6 +84,7 @@ class OrderService:
         order_id: int,
         status_update: OrderStatusUpdate,
         changed_by: int,
+        background_tasks: BackgroundTasks | None = None,
     ) -> OrderResponse:
         order = self.order_repository.get_order_by_id_for_update(db, order_id)
         if order is None:
@@ -112,5 +116,17 @@ class OrderService:
             f"new={status_update.status.value} | "
             f"changed_by={changed_by}"
         )
+        if self.notification_service is not None:
+            self.notification_service.notify_order_status_changed(
+                db,
+                background_tasks,
+                user_id=updated_order.student_id,
+                order_status=status_update.status.value,
+            )
+            if status_update.status == OrderStatus.READY:
+                self.notification_service.notify_laundry_completed(
+                    db,
+                    background_tasks,
+                    user_id=updated_order.student_id,
+                )
         return OrderResponse.model_validate(updated_order)
-

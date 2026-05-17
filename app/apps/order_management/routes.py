@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, status, Request
 from sqlalchemy.orm import Session
 from app.core.limiter import limiter
 
@@ -48,13 +48,14 @@ def get_vendor_orders(
 @limiter.limit("30/minute")
 def update_order_status(
     request: Request,
+    background_tasks: BackgroundTasks,
     order_id: int,
     data: OrderStatusUpdate,
     current_user: Annotated[AuthenticatedUser, Depends(require_vendor)],
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[OrderService, Depends(provide_order_service)],
 ) -> OrderResponse:
-    return service.update_status(db, order_id, data, current_user.id)
+    return service.update_status(db, order_id, data, current_user.id, background_tasks)
 
 
 @router.get("/{order_code}", response_model=OrderDetailResponse)

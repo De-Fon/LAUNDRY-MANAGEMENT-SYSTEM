@@ -1,11 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.apps.auth.repository import AuthRepository
 from app.apps.auth.schemas import LoginRequest, OTPVerifyRequest, RegisterRequest, TokenResponse
+from app.apps.notifications.service import NotificationService
 from app.apps.users.models import RoleEnum, User
 from app.apps.users.repository import UserRepository
 from app.apps.users.schemas import UserResponse
@@ -18,11 +19,22 @@ OTP_TTL_MINUTES = 10
 
 
 class AuthService:
-    def __init__(self, auth_repository: AuthRepository, user_repository: UserRepository) -> None:
+    def __init__(
+        self,
+        auth_repository: AuthRepository,
+        user_repository: UserRepository,
+        notification_service: NotificationService | None = None,
+    ) -> None:
         self.auth_repository = auth_repository
         self.user_repository = user_repository
+        self.notification_service = notification_service
 
-    def register(self, db: Session, data: RegisterRequest) -> TokenResponse:
+    def register(
+        self,
+        db: Session,
+        data: RegisterRequest,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> TokenResponse:
         existing_user = self.user_repository.find_by_identity(db, str(data.email), data.phone, data.student_id)
         if existing_user is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User identity already exists")
@@ -37,6 +49,14 @@ class AuthService:
             student_id=data.student_id,
         )
         token = create_access_token(str(user.id), {"role": user.role.value})
+        if self.notification_service is not None:
+            self.notification_service.send_account_notification_email(
+                db,
+                background_tasks,
+                user_id=user.id,
+                student_name=user.name,
+                message="Your account has been created successfully.",
+            )
         return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
     def login(self, db: Session, data: LoginRequest) -> TokenResponse:
@@ -71,6 +91,23 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
         return user
 
+    def request_password_reset_notification(
+        self,
+        db: Session,
+        email: str,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> dict:
+        user = self.auth_repository.get_user_by_email(db, str(email))
+        if user is not None and self.notification_service is not None:
+            self.notification_service.send_account_notification_email(
+                db,
+                background_tasks,
+                user_id=user.id,
+                student_name=user.name,
+                message="A password reset was requested for your account.",
+            )
+        return {"message": "If the email exists, a password reset notification has been queued"}
+
     def create_phone_verification_otp(self, db: Session, email: str, code: str) -> None:
         user = self.auth_repository.get_user_by_email(db, email)
         if user is None:
@@ -96,5 +133,4 @@ class AuthService:
         self.auth_repository.consume_otp(db, otp)
         verified_user = self.auth_repository.mark_user_verified(db, user)
         return UserResponse.model_validate(verified_user)
-
 

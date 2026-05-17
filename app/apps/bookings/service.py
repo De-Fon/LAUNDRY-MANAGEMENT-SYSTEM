@@ -1,18 +1,26 @@
 from datetime import UTC, datetime
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.apps.bookings.models import BookingItem, BookingStatus
 from app.apps.bookings.repository import BookingRepository
 from app.apps.bookings.schemas import BookingCreate, BookingResponse, BookingStatusUpdate
+from app.apps.notifications.service import NotificationService
 from app.apps.users.models import RoleEnum, User
 
 class BookingService:
-    def __init__(self, repository: BookingRepository) -> None:
+    def __init__(self, repository: BookingRepository, notification_service: NotificationService | None = None) -> None:
         self.repository = repository
+        self.notification_service = notification_service
 
-    def create_booking(self, db: Session, customer: User, data: BookingCreate) -> BookingResponse:
+    def create_booking(
+        self,
+        db: Session,
+        customer: User,
+        data: BookingCreate,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> BookingResponse:
         pickup_at = data.pickup_at if data.pickup_at.tzinfo is not None else data.pickup_at.replace(tzinfo=UTC)
         if pickup_at <= datetime.now(UTC):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pickup time must be in the future")
@@ -55,6 +63,12 @@ class BookingService:
             total_amount=total_amount,
             items=booking_items,
         )
+        if self.notification_service is not None:
+            self.notification_service.notify_pickup_created(
+                db,
+                background_tasks,
+                user_id=customer.id,
+            )
         return BookingResponse.model_validate(booking)
 
     def fetch_booking(self, db: Session, current_user: User, booking_id: int) -> BookingResponse:
@@ -108,5 +122,4 @@ class BookingService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking cannot be cancelled")
         updated_booking = self.repository.update_status(db, booking, BookingStatus.cancelled)
         return BookingResponse.model_validate(updated_booking)
-
 

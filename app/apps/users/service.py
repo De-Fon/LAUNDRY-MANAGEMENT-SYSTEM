@@ -1,13 +1,15 @@
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.apps.notifications.service import NotificationService
 from app.apps.users.repository import UserRepository
 from app.apps.users.schemas import UserCreate, UserResponse, UserUpdate
 from app.core.security import hash_password
 
 class UserService:
-    def __init__(self, repository: UserRepository) -> None:
+    def __init__(self, repository: UserRepository, notification_service: NotificationService | None = None) -> None:
         self.repository = repository
+        self.notification_service = notification_service
 
     def fetch_users(self, db: Session, limit: int = 100, offset: int = 0) -> list[UserResponse]:
         users = self.repository.list_users(db, limit, offset)
@@ -19,7 +21,12 @@ class UserService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         return UserResponse.model_validate(user)
 
-    def register_user(self, db: Session, data: UserCreate) -> UserResponse:
+    def register_user(
+        self,
+        db: Session,
+        data: UserCreate,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> UserResponse:
         existing_user = self.repository.find_by_identity(db, str(data.email), data.phone, data.student_id)
         if existing_user is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User identity already exists")
@@ -33,9 +40,23 @@ class UserService:
             role=data.role,
             student_id=data.student_id,
         )
+        if self.notification_service is not None:
+            self.notification_service.send_account_notification_email(
+                db,
+                background_tasks,
+                user_id=user.id,
+                student_name=user.name,
+                message="Your account has been created successfully.",
+            )
         return UserResponse.model_validate(user)
 
-    def update_user(self, db: Session, user_id: int, data: UserUpdate) -> UserResponse:
+    def update_user(
+        self,
+        db: Session,
+        user_id: int,
+        data: UserUpdate,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> UserResponse:
         user = self.repository.get_by_id(db, user_id)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -55,6 +76,14 @@ class UserService:
             if matching_user is not None and matching_user.id != user.id:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Student ID already exists")
         updated_user = self.repository.update_user(db, user, data)
+        if self.notification_service is not None:
+            self.notification_service.send_account_notification_email(
+                db,
+                background_tasks,
+                user_id=updated_user.id,
+                student_name=updated_user.name,
+                message="Your account details have been updated.",
+            )
         return UserResponse.model_validate(updated_user)
 
     def deactivate_user(self, db: Session, user_id: int) -> UserResponse:

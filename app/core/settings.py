@@ -16,11 +16,18 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     resend_from_email: str = "notifications@campuslaundry.co.ke"
     resend_from_name: str = "Campus Laundry"
+    email_enabled: bool = True
+    email_from: str = "noreply@yourdomain.com"
 
     environment: str = "development"
     algorithm: str = "HS256"
     at_api_key: str | None = None
     at_username: str | None = "sandbox"
+
+    africastalking_username: str = "sandbox"
+    africastalking_api_key: str | None = None
+    africastalking_sender_id: str | None = None
+    sms_enabled: bool = True
 
     daraja_environment: str = "sandbox"
     daraja_consumer_key: str | None = None

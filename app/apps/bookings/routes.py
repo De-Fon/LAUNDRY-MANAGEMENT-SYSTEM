@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 
 from app.apps.bookings.providers import provide_booking_service
@@ -15,12 +15,13 @@ router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
 @router.post("", response_model=BookingResponse)
 def create_booking(
+    background_tasks: BackgroundTasks,
     data: BookingCreate,
     current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     service: Annotated[BookingService, Depends(provide_booking_service)],
 ) -> BookingResponse:
-    return service.create_booking(db, current_user, data)
+    return service.create_booking(db, current_user, data, background_tasks)
 
 
 @router.get("/me", response_model=list[BookingResponse])
